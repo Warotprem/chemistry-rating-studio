@@ -548,22 +548,6 @@ function downloadFile(filename, contents, type) {
   }, 0);
 }
 
-function openFile(contents, type) {
-  const blob = new Blob([contents], {
-    type,
-  });
-  const url = window.URL.createObjectURL(blob);
-  const openedWindow = window.open(url, "_blank", "noopener,noreferrer");
-
-  if (!openedWindow) {
-    window.location.assign(url);
-  }
-
-  window.setTimeout(() => {
-    window.URL.revokeObjectURL(url);
-  }, 60_000);
-}
-
 export default function App() {
   const sharedResultsEnabled = isSharedResultsEnabled();
   const [people, setPeople] = useState([]);
@@ -847,39 +831,6 @@ export default function App() {
     return buildReadableExportHtml({
       exportedAt,
       exportPayload,
-    });
-  }
-
-  function buildRecordReportHtml(record) {
-    if (typeof record?.reportHtml === "string" && record.reportHtml.trim()) {
-      return record.reportHtml;
-    }
-
-    const exportedAt = record?.updatedAt || record?.createdAt || new Date().toISOString();
-    const relatedActivity = activityLog.filter((entry) => entry.sessionId === record?.sessionId);
-
-    return buildReadableExportHtml({
-      exportedAt,
-      exportPayload: {
-        exportedAt,
-        app: "people-rating-flow",
-        currentSession: {
-          sessionId: record?.sessionId || "",
-          raterName: record?.raterName || "",
-          activeIndex: 0,
-          showResults: true,
-          completedPeople: Number(record?.analyzedCount) || 0,
-          totalPeople: Number(record?.peopleCount) || 0,
-        },
-        rosterSnapshot: Array.isArray(record?.rosterSnapshot) ? record.rosterSnapshot : [],
-        currentDraft: {
-          ratingsByPerson: record?.ratingsByPerson ?? {},
-          commentsByPerson: record?.commentsByPerson ?? {},
-        },
-        currentRevealSnapshot: sanitizeRecordForEmbeddedExport(record),
-        revealRecords: [sanitizeRecordForEmbeddedExport(record)].filter(Boolean),
-        activityLog: relatedActivity,
-      },
     });
   }
 
@@ -1207,22 +1158,6 @@ export default function App() {
     downloadFile(createExportFilename(raterName, exportedAt), exportHtml, "text/html");
   }
 
-  function handleOpenSavedReport(record) {
-    const reportHtml = buildRecordReportHtml(record);
-    openFile(reportHtml, "text/html");
-  }
-
-  function handleDownloadSavedReport(record) {
-    const exportedAt = record?.updatedAt || record?.createdAt || new Date().toISOString();
-    const reportHtml = buildRecordReportHtml(record);
-    const filename =
-      typeof record?.reportFileName === "string" && record.reportFileName
-        ? record.reportFileName
-        : createExportFilename(record?.raterName, exportedAt);
-
-    downloadFile(filename, reportHtml, "text/html");
-  }
-
   if (status === "loading") {
     return (
       <main className="app-shell">
@@ -1313,13 +1248,7 @@ export default function App() {
           />
 
           <aside className="side-panel">
-            <SystemResultsPanel
-              currentSessionId={sessionId}
-              onDownloadRecordReport={handleDownloadSavedReport}
-              onExportData={handleExportData}
-              onOpenRecordReport={handleOpenSavedReport}
-              records={revealRecords}
-            />
+            <SystemResultsPanel onExportData={handleExportData} />
           </aside>
         </section>
       ) : (
@@ -1422,13 +1351,7 @@ export default function App() {
                 </div>
               </section>
 
-              <SystemResultsPanel
-                currentSessionId={sessionId}
-                onDownloadRecordReport={handleDownloadSavedReport}
-                onExportData={handleExportData}
-                onOpenRecordReport={handleOpenSavedReport}
-                records={revealRecords}
-              />
+              <SystemResultsPanel onExportData={handleExportData} />
             </aside>
           </section>
 
