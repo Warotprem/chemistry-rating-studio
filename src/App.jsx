@@ -560,11 +560,13 @@ export default function App() {
   const [pendingRaterName, setPendingRaterName] = useState("");
   const [sessionId, setSessionId] = useState("");
   const [nameError, setNameError] = useState("");
+  const [grayDetectorName, setGrayDetectorName] = useState("");
   const [revealRecords, setRevealRecords] = useState([]);
   const [activityLog, setActivityLog] = useState([]);
   const [sharedStatus, setSharedStatus] = useState(sharedResultsEnabled ? "connecting" : "local");
   const resultsRef = useRef(null);
   const syncedActivityIdsRef = useRef(new Set());
+  const grayDetectorTimeoutRef = useRef(null);
 
   useEffect(() => {
     let mounted = true;
@@ -720,6 +722,15 @@ export default function App() {
   useEffect(() => {
     document.title = "People Rating Flow";
   }, []);
+
+  useEffect(
+    () => () => {
+      if (grayDetectorTimeoutRef.current) {
+        window.clearTimeout(grayDetectorTimeoutRef.current);
+      }
+    },
+    [],
+  );
 
   const completedPeople = useMemo(
     () => getCompletedPeopleCount(people, DEFAULT_CATEGORIES, ratingsByPerson),
@@ -957,6 +968,25 @@ export default function App() {
     setActivityLog((current) => [nextEntry, ...current]);
   }
 
+  function finalizeRaterSession(nextName, nextSessionId) {
+    setSessionId(nextSessionId);
+    setRaterName(nextName);
+    setPendingRaterName(nextName);
+    setGrayDetectorName("");
+    setNameError("");
+    setActiveIndex(0);
+    appendActivityEntry(
+      {
+        type: "session_started",
+        summary: `Session started for ${nextName}.`,
+      },
+      {
+        sessionId: nextSessionId,
+        raterName: nextName,
+      },
+    );
+  }
+
   function handleRatingChange(personId, category, value) {
     const person = people.find((entry) => entry.id === personId);
 
@@ -1042,22 +1072,25 @@ export default function App() {
     }
 
     const nextSessionId = sessionId || createClientSessionId();
+    const hasGrayDetectorMatch = /m/i.test(nextName);
 
-    setSessionId(nextSessionId);
-    setRaterName(nextName);
-    setPendingRaterName(nextName);
-    setNameError("");
-    setActiveIndex(0);
-    appendActivityEntry(
-      {
-        type: "session_started",
-        summary: `Session started for ${nextName}.`,
-      },
-      {
-        sessionId: nextSessionId,
-        raterName: nextName,
-      },
-    );
+    if (grayDetectorTimeoutRef.current) {
+      window.clearTimeout(grayDetectorTimeoutRef.current);
+    }
+
+    if (hasGrayDetectorMatch) {
+      setSessionId(nextSessionId);
+      setPendingRaterName(nextName);
+      setGrayDetectorName(nextName);
+      setNameError("");
+      grayDetectorTimeoutRef.current = window.setTimeout(() => {
+        grayDetectorTimeoutRef.current = null;
+        finalizeRaterSession(nextName, nextSessionId);
+      }, 5000);
+      return;
+    }
+
+    finalizeRaterSession(nextName, nextSessionId);
   }
 
   function handleSwitchRater() {
@@ -1067,6 +1100,11 @@ export default function App() {
 
     if (!confirmed) {
       return;
+    }
+
+    if (grayDetectorTimeoutRef.current) {
+      window.clearTimeout(grayDetectorTimeoutRef.current);
+      grayDetectorTimeoutRef.current = null;
     }
 
     appendActivityEntry({
@@ -1083,6 +1121,7 @@ export default function App() {
     setShowResults(false);
     setRaterName("");
     setPendingRaterName("");
+    setGrayDetectorName("");
     setNameError("");
     setSessionId(createClientSessionId());
   }
@@ -1244,6 +1283,7 @@ export default function App() {
               }
             }}
             onSubmit={handleRaterNameSubmit}
+            surpriseName={grayDetectorName}
             value={pendingRaterName}
           />
 

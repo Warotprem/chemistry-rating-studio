@@ -616,6 +616,22 @@ button {
   font-size: 0.92rem;
 }
 
+.identity-panel--detector {
+  background:
+    radial-gradient(circle at top right, rgba(246, 196, 141, 0.16), transparent 32%),
+    linear-gradient(180deg, rgba(255, 159, 182, 0.1), rgba(255, 246, 243, 0.03)),
+    var(--surface-strong);
+}
+
+.identity-panel--detector .completion-badge {
+  background: rgba(246, 196, 141, 0.12);
+  color: #ffd59f;
+}
+
+.identity-panel--detector strong {
+  color: var(--text);
+}
+
 .summary-card__title {
   margin: 0;
   font-size: 1.45rem;
