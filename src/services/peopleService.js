@@ -20,7 +20,6 @@ function sanitizeRosterEntry(person) {
     name,
     role: typeof person.role === "string" ? person.role.trim() : "",
     summary: typeof person.summary === "string" ? person.summary.trim() : "",
-    privateNotes: typeof person.privateNotes === "string" ? person.privateNotes.trim() : "",
   };
 }
 

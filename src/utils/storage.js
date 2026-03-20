@@ -27,6 +27,21 @@ function sanitizeCommentsByPerson(input, people) {
   );
 }
 
+function sanitizeRosterSnapshot(input) {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  return input
+    .filter((person) => person && typeof person === "object")
+    .map((person) => ({
+      id: typeof person.id === "string" ? person.id : "",
+      name: typeof person.name === "string" ? person.name : "",
+      role: typeof person.role === "string" ? person.role : "",
+      summary: typeof person.summary === "string" ? person.summary : "",
+    }));
+}
+
 export function sanitizeRaterName(value) {
   return typeof value === "string" ? value.trim().replace(/\s+/g, " ").slice(0, 80) : "";
 }
@@ -222,7 +237,7 @@ function sanitizeRevealRecord(record) {
     bestByCategory: Array.isArray(record.bestByCategory) ? record.bestByCategory : [],
     categoryAverages: Array.isArray(record.categoryAverages) ? record.categoryAverages : [],
     rankedRows: Array.isArray(record.rankedRows) ? record.rankedRows : [],
-    rosterSnapshot: Array.isArray(record.rosterSnapshot) ? record.rosterSnapshot : [],
+    rosterSnapshot: sanitizeRosterSnapshot(record.rosterSnapshot),
     ratingsByPerson:
       record.ratingsByPerson && typeof record.ratingsByPerson === "object"
         ? record.ratingsByPerson

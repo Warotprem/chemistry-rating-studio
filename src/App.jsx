@@ -59,7 +59,6 @@ function buildRosterSnapshot(people) {
     name: person.name,
     role: person.role,
     summary: person.summary,
-    privateNotes: person.privateNotes,
   }));
 }
 

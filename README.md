@@ -63,7 +63,7 @@ npm run preview
 
 ## Backend Setup
 
-The app currently reads the roster from [src/services/peopleService.js](/Users/warotkomontree/Documents/Playground/src/services/peopleService.js), which wraps a local file at [src/data/peopleRoster.js](/Users/warotkomontree/Documents/Playground/src/data/peopleRoster.js).
+The app currently reads the roster from [src/services/peopleService.js](/Users/warotkomontree/Documents/Playground/src/services/peopleService.js), which wraps a local public roster file at [src/data/peopleRoster.js](/Users/warotkomontree/Documents/Playground/src/data/peopleRoster.js).
 
 To connect your own backend, replace the implementation of `fetchPeopleRoster()` with your API call and keep the returned shape:
 
@@ -72,12 +72,11 @@ To connect your own backend, replace the implementation of `fetchPeopleRoster()`
   id: "unique-id",
   name: "Person Name",
   role: "Optional role",
-  summary: "Optional short context",
-  privateNotes: "Hidden owner-only comments used for coach-style conclusions"
+  summary: "Optional short context"
 }
 ```
 
-The frontend treats the roster as read-only, does not expose add/edit/delete controls to visitors, and never renders `privateNotes` directly. Those notes are only used to generate internal comparison insights in the conclusions view.
+The frontend treats the roster as read-only and does not expose add/edit/delete controls to visitors. Any truly private owner-only notes must stay on a backend and must not be shipped to the browser bundle.
 
 ## Usage Notes
 
