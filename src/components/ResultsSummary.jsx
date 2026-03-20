@@ -14,6 +14,7 @@ export default function ResultsSummary({
   categories,
   coachInsights,
   peopleCount,
+  raterName,
   raterProfile,
   rankedRows,
 }) {
@@ -23,6 +24,7 @@ export default function ResultsSummary({
         <div>
           <p className="eyebrow">Final reveal</p>
           <h2>Chemistry ranking and summary</h2>
+          <p className="results-panel__subhead">Saved for {raterName}</p>
         </div>
         <span className="completion-badge completion-badge--done">Complete score set collected</span>
       </div>

@@ -9,6 +9,10 @@ export function createEmptyRatingsMap(people, categories) {
   );
 }
 
+export function createEmptyCommentsMap(people) {
+  return Object.fromEntries(people.map((person) => [person.id, ""]));
+}
+
 export function getCompletedPeopleCount(people, categories, ratingsByPerson) {
   return people.filter((person) =>
     categories.every((category) => {

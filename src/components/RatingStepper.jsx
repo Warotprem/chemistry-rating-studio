@@ -1,4 +1,5 @@
 import { ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react";
+import { CATEGORY_DESCRIPTIONS } from "../constants";
 import { isValidRating } from "../utils/scoring";
 
 const SCORES = [1, 2, 3, 4, 5];
@@ -20,6 +21,8 @@ function getCompletedCategoryCount(personId, categories, ratingsByPerson) {
 export default function RatingStepper({
   activeIndex,
   categories,
+  commentsByPerson,
+  onCommentChange,
   onGoToPerson,
   onNext,
   onPrevious,
@@ -77,6 +80,7 @@ export default function RatingStepper({
           {categories.map((category) => {
             const rawScore = Number(ratingsByPerson?.[activePerson.id]?.[category]);
             const selectedScore = isValidRating(rawScore) ? rawScore : null;
+            const description = CATEGORY_DESCRIPTIONS[category] ?? "";
 
             return (
               <article key={category} className="category-card">
@@ -84,6 +88,8 @@ export default function RatingStepper({
                   <strong>{category}</strong>
                   <span>{selectedScore !== null ? `${selectedScore}/5` : "Required"}</span>
                 </div>
+
+                {description ? <p className="category-card__description">{description}</p> : null}
 
                 <div className="score-grid" role="group" aria-label={`${activePerson.name} ${category}`}>
                   {SCORES.map((score) => (
@@ -100,6 +106,20 @@ export default function RatingStepper({
               </article>
             );
           })}
+        </div>
+
+        <div className="comment-card">
+          <div className="category-card__header">
+            <strong>Rater comment</strong>
+            <span>Saved to system</span>
+          </div>
+          <textarea
+            className="comment-input"
+            rows={5}
+            placeholder={`Add notes about ${activePerson.name}, why you scored this way, or anything you want saved in the export.`}
+            value={commentsByPerson?.[activePerson.id] ?? ""}
+            onChange={(event) => onCommentChange(activePerson.id, event.target.value)}
+          />
         </div>
       </div>
 

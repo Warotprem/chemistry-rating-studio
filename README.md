@@ -7,12 +7,17 @@ A visitor-facing React app for rating a fixed roster of people across multiple c
 - Fixed roster loaded through a dedicated people service
 - Default categories: Communication, Reliability, Leadership, Teamwork, Creativity
 - Sequential rating flow for visitors
+- Required rater name before the scoring flow begins
 - 1 to 5 scoring per category for every person
+- Per-person comments saved alongside ratings
 - Conclusions locked until the full roster is completed
 - Tie-aware ranking display
 - Summary cards for best overall, best by category, category averages, and number of people
 - Final ranking table revealed after completion
 - Persistent visitor progress with `localStorage`
+- Saved reveal history stored locally in the app for later review
+- Activity log for rating changes, comments, reveals, resets, and exports
+- JSON export for the full local dataset
 - Reset current rating session
 - Responsive dashboard layout
 
@@ -79,7 +84,7 @@ The frontend treats the roster as read-only, does not expose add/edit/delete con
 - Every visitor must rate every person in every category before conclusions appear.
 - Overall score is calculated from rated categories only.
 - Scores are shown with 2 decimal places.
-- Progress is saved in `localStorage` for the current browser.
+- The active rater name, rating draft, per-person comments, saved reveal history, and activity log are stored in `localStorage` for the current browser.
 - Reset clears the visitor's saved session.
 
 ## Project Structure
