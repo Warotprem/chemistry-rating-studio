@@ -1221,6 +1221,21 @@ export default function App() {
     );
   }
 
+  if (grayDetectorName) {
+    return (
+      <main className="app-shell app-shell--detector">
+        <section className="detector-screen">
+          <p className="detector-screen__eyebrow">Surprise check</p>
+          <h1>Gray detector: Detected</h1>
+          <p className="detector-screen__name">{grayDetectorName}</p>
+          <p className="detector-screen__copy">
+            Hold for 5 seconds. The rating flow will continue automatically.
+          </p>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="app-shell">
       <section className="hero-panel">
@@ -1283,7 +1298,6 @@ export default function App() {
               }
             }}
             onSubmit={handleRaterNameSubmit}
-            surpriseName={grayDetectorName}
             value={pendingRaterName}
           />
 

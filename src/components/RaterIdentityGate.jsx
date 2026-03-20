@@ -2,28 +2,8 @@ export default function RaterIdentityGate({
   errorMessage,
   onChange,
   onSubmit,
-  surpriseName,
   value,
 }) {
-  if (surpriseName) {
-    return (
-      <section className="identity-panel identity-panel--detector">
-        <div className="panel-head">
-          <div>
-            <p className="eyebrow">Surprise</p>
-            <h2>Gray detector: Detected</h2>
-          </div>
-          <span className="completion-badge">5 second hold</span>
-        </div>
-
-        <p className="identity-panel__copy">
-          Running a quick check for <strong>{surpriseName}</strong>. The rating flow will continue
-          automatically in a moment.
-        </p>
-      </section>
-    );
-  }
-
   return (
     <section className="identity-panel">
       <div className="panel-head">

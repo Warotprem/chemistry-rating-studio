@@ -68,6 +68,12 @@ button {
   padding: 24px 0 56px;
 }
 
+.app-shell--detector {
+  width: 100%;
+  min-height: 100vh;
+  padding: 0;
+}
+
 .hero-panel,
 .state-panel,
 .identity-panel,
@@ -616,20 +622,94 @@ button {
   font-size: 0.92rem;
 }
 
-.identity-panel--detector {
+.detector-screen {
+  position: relative;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  gap: 18px;
+  padding: 32px;
+  text-align: center;
   background:
-    radial-gradient(circle at top right, rgba(246, 196, 141, 0.16), transparent 32%),
-    linear-gradient(180deg, rgba(255, 159, 182, 0.1), rgba(255, 246, 243, 0.03)),
-    var(--surface-strong);
+    radial-gradient(circle at 50% 35%, rgba(246, 196, 141, 0.24), transparent 18%),
+    radial-gradient(circle at 50% 50%, rgba(255, 159, 182, 0.34), transparent 34%),
+    linear-gradient(180deg, #1d060d 0%, #3a0d18 45%, #15060b 100%);
+  border: 0;
+  border-radius: 0;
 }
 
-.identity-panel--detector .completion-badge {
-  background: rgba(246, 196, 141, 0.12);
+.detector-screen::before,
+.detector-screen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.detector-screen::before {
+  background:
+    repeating-linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.03) 0 2px,
+      transparent 2px 6px
+    );
+  mix-blend-mode: screen;
+  opacity: 0.22;
+}
+
+.detector-screen::after {
+  inset: 24px;
+  border: 1px solid rgba(255, 210, 196, 0.1);
+  border-radius: 28px;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.03),
+    inset 0 0 140px rgba(255, 159, 182, 0.08);
+}
+
+.detector-screen__eyebrow {
+  margin: 0;
   color: #ffd59f;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
-.identity-panel--detector strong {
-  color: var(--text);
+.detector-screen h1 {
+  margin: 0;
+  max-width: 10ch;
+  font-family: "Bodoni Moda", serif;
+  font-size: clamp(3.6rem, 11vw, 8rem);
+  line-height: 0.92;
+  letter-spacing: -0.05em;
+  color: #fff3ec;
+  text-transform: uppercase;
+  text-shadow:
+    0 0 28px rgba(255, 159, 182, 0.3),
+    0 18px 80px rgba(0, 0, 0, 0.55);
+}
+
+.detector-screen__name {
+  margin: 0;
+  padding: 12px 18px;
+  border-radius: 999px;
+  background: rgba(255, 243, 236, 0.08);
+  border: 1px solid rgba(255, 225, 214, 0.12);
+  color: #fff3ec;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: clamp(1rem, 2.4vw, 1.35rem);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.detector-screen__copy {
+  margin: 0;
+  max-width: 34ch;
+  color: #f0ccc7;
+  font-size: 1.05rem;
+  line-height: 1.7;
 }
 
 .summary-card__title {
