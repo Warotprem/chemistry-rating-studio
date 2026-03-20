@@ -1,8 +1,6 @@
 import { ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react";
-import { CATEGORY_DESCRIPTIONS } from "../constants";
+import { CATEGORY_DESCRIPTIONS, RATING_MAX, RATING_MIN, RATING_STEP } from "../constants";
 import { isValidRating } from "../utils/scoring";
-
-const SCORES = [1, 2, 3, 4, 5];
 
 function isPersonComplete(personId, categories, ratingsByPerson) {
   return categories.every((category) => {
@@ -87,22 +85,29 @@ export default function RatingStepper({
               <article key={category} className="category-card">
                 <div className="category-card__header">
                   <strong>{category}</strong>
-                  <span>{selectedScore !== null ? `${selectedScore}/5` : "Required"}</span>
+                  <span>{selectedScore !== null ? `${selectedScore}/${RATING_MAX}` : "Required"}</span>
                 </div>
 
                 {description ? <p className="category-card__description">{description}</p> : null}
 
-                <div className="score-grid" role="group" aria-label={`${activePerson.name} ${category}`}>
-                  {SCORES.map((score) => (
-                    <button
-                      key={score}
-                      type="button"
-                      className={`score-pill ${selectedScore === score ? "score-pill--active" : ""}`}
-                      onClick={() => onRatingChange(activePerson.id, category, score)}
-                    >
-                      {score}
-                    </button>
-                  ))}
+                <div className="score-slider">
+                  <input
+                    type="range"
+                    className="score-slider__input"
+                    min={RATING_MIN}
+                    max={RATING_MAX}
+                    step={RATING_STEP}
+                    value={selectedScore ?? RATING_MIN}
+                    aria-label={`${activePerson.name} ${category}`}
+                    onChange={(event) =>
+                      onRatingChange(activePerson.id, category, Number(event.target.value))
+                    }
+                  />
+                  <div className="score-slider__meta" aria-hidden="true">
+                    <span>{RATING_MIN}</span>
+                    <strong>{selectedScore !== null ? selectedScore : "Set score"}</strong>
+                    <span>{RATING_MAX}</span>
+                  </div>
                 </div>
               </article>
             );

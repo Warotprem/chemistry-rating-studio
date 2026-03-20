@@ -2,6 +2,8 @@ import {
   ACTIVITY_LOG_STORAGE_KEY,
   COMMENTS_STORAGE_KEY,
   REVEAL_RECORDS_STORAGE_KEY,
+  RATING_MAX,
+  RATING_MIN,
   SESSION_STORAGE_KEY,
   STORAGE_KEY,
 } from "../constants";
@@ -11,7 +13,7 @@ function sanitizeRatingsForPerson(input, categories) {
   return Object.fromEntries(
     categories.map((category) => {
       const value = Number(input?.[category]);
-      const valid = Number.isFinite(value) && value >= 1 && value <= 5;
+      const valid = Number.isInteger(value) && value >= RATING_MIN && value <= RATING_MAX;
       return [category, valid ? value : null];
     }),
   );

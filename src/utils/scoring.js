@@ -1,7 +1,9 @@
+import { RATING_MAX, RATING_MIN } from "../constants";
+
 const SCORE_EPSILON = 1e-9;
 
 export function isValidRating(value) {
-  return Number.isFinite(value) && value >= 1 && value <= 5;
+  return Number.isInteger(value) && value >= RATING_MIN && value <= RATING_MAX;
 }
 
 export function formatScore(value) {

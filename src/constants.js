@@ -1,6 +1,10 @@
 export const PERSONAL_RATING_CATEGORY =
   "Personal Rating (What You Think the Average Should Be)";
 
+export const RATING_MIN = 1;
+export const RATING_MAX = 10;
+export const RATING_STEP = 1;
+
 export const DEFAULT_CATEGORIES = [
   "Body",
   "Personality",

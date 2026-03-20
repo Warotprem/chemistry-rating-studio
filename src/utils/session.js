@@ -1,3 +1,5 @@
+import { RATING_MAX, RATING_MIN } from "../constants";
+
 export const MIN_COMPLETED_PROFILES = 5;
 
 export function createEmptyRatingsMap(people, categories) {
@@ -17,7 +19,7 @@ export function getCompletedPeopleCount(people, categories, ratingsByPerson) {
   return people.filter((person) =>
     categories.every((category) => {
       const value = Number(ratingsByPerson?.[person.id]?.[category]);
-      return Number.isFinite(value) && value >= 1 && value <= 5;
+      return Number.isInteger(value) && value >= RATING_MIN && value <= RATING_MAX;
     }),
   ).length;
 }
