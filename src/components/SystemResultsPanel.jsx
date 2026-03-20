@@ -29,22 +29,12 @@ function getCommentCount(record) {
 }
 
 export default function SystemResultsPanel({
-  activityLog,
   currentSessionId,
+  onDownloadRecordReport,
   onExportData,
+  onOpenRecordReport,
   records,
-  storageMode,
 }) {
-  const latestLog = activityLog[0] ?? null;
-  const storageLabel =
-    storageMode === "shared"
-      ? "Shared across devices"
-      : storageMode === "connecting"
-        ? "Connecting shared storage"
-        : storageMode === "error"
-          ? "Shared storage error"
-          : "Local device only";
-
   return (
     <section className="summary-card">
       <div className="panel-head panel-head--compact">
@@ -58,13 +48,12 @@ export default function SystemResultsPanel({
         </span>
       </div>
 
-      <div className="system-records__toolbar">
-        <div className="system-records__stats">
-          <span>{storageLabel}</span>
-          <span>{activityLog.length} logs</span>
-          <span>{latestLog ? `Last log ${formatDateTime(latestLog.timestamp)}` : "No logs yet"}</span>
-        </div>
-        <button type="button" className="action-button action-button--ghost" onClick={onExportData}>
+      <div className="system-records__export">
+        <button
+          type="button"
+          className="action-button system-records__export-button"
+          onClick={onExportData}
+        >
           Export report
         </button>
       </div>
@@ -151,6 +140,23 @@ export default function SystemResultsPanel({
                           ))}
                         </tbody>
                       </table>
+                    </div>
+
+                    <div className="system-record__actions">
+                      <button
+                        type="button"
+                        className="action-button action-button--ghost"
+                        onClick={() => onOpenRecordReport(record)}
+                      >
+                        Open saved report
+                      </button>
+                      <button
+                        type="button"
+                        className="action-button action-button--ghost"
+                        onClick={() => onDownloadRecordReport(record)}
+                      >
+                        Download HTML
+                      </button>
                     </div>
                   </div>
                 </div>

@@ -25,6 +25,8 @@ function sanitizeRevealRecord(record) {
     raterName: typeof record.raterName === "string" ? record.raterName : "",
     createdAt: typeof record.createdAt === "string" ? record.createdAt : "",
     updatedAt: typeof record.updatedAt === "string" ? record.updatedAt : "",
+    reportFileName: typeof record.reportFileName === "string" ? record.reportFileName : "",
+    reportHtml: typeof record.reportHtml === "string" ? record.reportHtml : "",
     bestOverall:
       record.bestOverall && typeof record.bestOverall === "object"
         ? {

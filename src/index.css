@@ -977,31 +977,30 @@ button {
   background: rgba(255, 247, 243, 0.05);
 }
 
+.system-record__actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.system-record__actions .action-button {
+  flex: 1 1 220px;
+}
+
 .system-records__empty {
   margin: 0;
   line-height: 1.6;
 }
 
-.system-records__toolbar,
-.system-records__stats {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.system-records__toolbar {
-  align-items: center;
+.system-records__export {
   margin-bottom: 14px;
 }
 
-.system-records__stats {
-  flex-wrap: wrap;
-}
-
-.system-records__stats span {
-  color: var(--text-soft);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 0.74rem;
+.system-records__export-button {
+  width: 100%;
+  min-height: 62px;
+  font-size: 1rem;
+  letter-spacing: 0.01em;
 }
 
 @media (max-width: 1120px) {
@@ -1061,13 +1060,15 @@ button {
   .person-card__header,
   .panel-head,
   .stepper-footer,
-  .system-records__toolbar,
-  .system-records__stats,
   .system-record__header,
   .system-record__meta,
   .system-record__leader {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .system-record__actions .action-button {
+    width: 100%;
   }
 
   .stepper-footer__hint {

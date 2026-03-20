@@ -21,6 +21,10 @@ function sanitizeComment(value) {
   return typeof value === "string" ? value.replace(/\r\n/g, "\n").slice(0, 4000) : "";
 }
 
+function sanitizeReportHtml(value) {
+  return typeof value === "string" ? value.slice(0, 500000) : "";
+}
+
 function sanitizeCommentsByPerson(input, people) {
   return Object.fromEntries(
     people.map((person) => [person.id, sanitizeComment(input?.[person.id])]),
@@ -223,6 +227,8 @@ function sanitizeRevealRecord(record) {
     raterName,
     createdAt: createdAt || updatedAt,
     updatedAt,
+    reportFileName: typeof record.reportFileName === "string" ? record.reportFileName : "",
+    reportHtml: sanitizeReportHtml(record.reportHtml),
     analyzedCount: Number.isFinite(Number(record.analyzedCount)) ? Number(record.analyzedCount) : 0,
     peopleCount: Number.isFinite(Number(record.peopleCount)) ? Number(record.peopleCount) : 0,
     categories: Array.isArray(record.categories) ? record.categories.filter((item) => typeof item === "string") : [],

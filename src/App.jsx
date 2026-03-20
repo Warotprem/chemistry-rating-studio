@@ -212,6 +212,66 @@ function formatExportDateTime(value) {
   }).format(date);
 }
 
+function createExportFilename(raterName, exportedAt) {
+  const exportStamp = exportedAt.replace(/[:.]/g, "-");
+  const safeName =
+    (raterName || "system")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "system";
+
+  return `people-rating-report-${safeName}-${exportStamp}.html`;
+}
+
+function sanitizeRecordForEmbeddedExport(record) {
+  if (!record || typeof record !== "object") {
+    return null;
+  }
+
+  const { reportFileName, reportHtml, ...rest } = record;
+
+  return {
+    ...rest,
+    reportFileName: typeof reportFileName === "string" ? reportFileName : "",
+  };
+}
+
+function buildExportPayload({
+  activityLog,
+  activeIndex,
+  commentsByPerson,
+  completedPeople,
+  people,
+  ratingsByPerson,
+  raterName,
+  revealRecords,
+  sessionId,
+  showResults,
+  snapshot,
+  exportedAt,
+}) {
+  return {
+    exportedAt,
+    app: "people-rating-flow",
+    currentSession: {
+      sessionId,
+      raterName,
+      activeIndex,
+      showResults,
+      completedPeople,
+      totalPeople: people.length,
+    },
+    rosterSnapshot: buildRosterSnapshot(people),
+    currentDraft: {
+      ratingsByPerson,
+      commentsByPerson,
+    },
+    currentRevealSnapshot: sanitizeRecordForEmbeddedExport(snapshot),
+    revealRecords: revealRecords.map(sanitizeRecordForEmbeddedExport).filter(Boolean),
+    activityLog,
+  };
+}
+
 function buildReadableExportHtml({ exportedAt, exportPayload }) {
   const snapshot = exportPayload.currentRevealSnapshot;
   const topRows = snapshot.rankedRows.slice(0, 10);
@@ -488,6 +548,22 @@ function downloadFile(filename, contents, type) {
   }, 0);
 }
 
+function openFile(contents, type) {
+  const blob = new Blob([contents], {
+    type,
+  });
+  const url = window.URL.createObjectURL(blob);
+  const openedWindow = window.open(url, "_blank", "noopener,noreferrer");
+
+  if (!openedWindow) {
+    window.location.assign(url);
+  }
+
+  window.setTimeout(() => {
+    window.URL.revokeObjectURL(url);
+  }, 60_000);
+}
+
 export default function App() {
   const sharedResultsEnabled = isSharedResultsEnabled();
   const [people, setPeople] = useState([]);
@@ -747,6 +823,66 @@ export default function App() {
     ],
   );
 
+  function buildReportHtml({
+    exportedAt,
+    snapshot,
+    activityEntries,
+    records,
+  }) {
+    const exportPayload = buildExportPayload({
+      activityLog: activityEntries,
+      activeIndex,
+      commentsByPerson,
+      completedPeople,
+      people,
+      ratingsByPerson,
+      raterName,
+      revealRecords: records,
+      sessionId,
+      showResults,
+      snapshot,
+      exportedAt,
+    });
+
+    return buildReadableExportHtml({
+      exportedAt,
+      exportPayload,
+    });
+  }
+
+  function buildRecordReportHtml(record) {
+    if (typeof record?.reportHtml === "string" && record.reportHtml.trim()) {
+      return record.reportHtml;
+    }
+
+    const exportedAt = record?.updatedAt || record?.createdAt || new Date().toISOString();
+    const relatedActivity = activityLog.filter((entry) => entry.sessionId === record?.sessionId);
+
+    return buildReadableExportHtml({
+      exportedAt,
+      exportPayload: {
+        exportedAt,
+        app: "people-rating-flow",
+        currentSession: {
+          sessionId: record?.sessionId || "",
+          raterName: record?.raterName || "",
+          activeIndex: 0,
+          showResults: true,
+          completedPeople: Number(record?.analyzedCount) || 0,
+          totalPeople: Number(record?.peopleCount) || 0,
+        },
+        rosterSnapshot: Array.isArray(record?.rosterSnapshot) ? record.rosterSnapshot : [],
+        currentDraft: {
+          ratingsByPerson: record?.ratingsByPerson ?? {},
+          commentsByPerson: record?.commentsByPerson ?? {},
+        },
+        currentRevealSnapshot: sanitizeRecordForEmbeddedExport(record),
+        revealRecords: [sanitizeRecordForEmbeddedExport(record)].filter(Boolean),
+        activityLog: relatedActivity,
+      },
+    });
+  }
+
   useEffect(() => {
     if (
       status !== "ready" ||
@@ -758,9 +894,21 @@ export default function App() {
       return;
     }
 
-    const snapshotToStore = {
+    const updatedAt = new Date().toISOString();
+    const snapshotBase = {
       ...baseRevealSnapshot,
-      updatedAt: new Date().toISOString(),
+      updatedAt,
+    };
+    const reportHtml = buildReportHtml({
+      exportedAt: updatedAt,
+      snapshot: snapshotBase,
+      activityEntries: activityLog,
+      records: revealRecords,
+    });
+    const snapshotToStore = {
+      ...snapshotBase,
+      reportFileName: createExportFilename(snapshotBase.raterName, updatedAt),
+      reportHtml,
     };
     const nextRecords = upsertStoredRevealRecord(snapshotToStore);
 
@@ -1012,12 +1160,6 @@ export default function App() {
 
   function handleExportData() {
     const exportedAt = new Date().toISOString();
-    const exportStamp = exportedAt.replace(/[:.]/g, "-");
-    const safeName =
-      (raterName || "system")
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "") || "system";
     const exportLogEntry = {
       id: createActivityEntryId({
         timestamp: exportedAt,
@@ -1036,31 +1178,24 @@ export default function App() {
       },
     };
     const nextActivityLog = [exportLogEntry, ...activityLog];
-
-    const currentRevealSnapshot = {
+    const snapshot = {
       ...baseRevealSnapshot,
       updatedAt: exportedAt,
     };
-    const exportPayload = {
-      exportedAt,
-      app: "people-rating-flow",
-      currentSession: {
-        sessionId,
-        raterName,
-        activeIndex,
-        showResults,
-        completedPeople,
-        totalPeople: people.length,
-      },
-      rosterSnapshot: buildRosterSnapshot(people),
-      currentDraft: {
-        ratingsByPerson,
-        commentsByPerson,
-      },
-      currentRevealSnapshot,
-      revealRecords,
+    const exportPayload = buildExportPayload({
       activityLog: nextActivityLog,
-    };
+      activeIndex,
+      commentsByPerson,
+      completedPeople,
+      people,
+      ratingsByPerson,
+      raterName,
+      revealRecords,
+      sessionId,
+      showResults,
+      snapshot,
+      exportedAt,
+    });
 
     setActivityLog(nextActivityLog);
 
@@ -1069,7 +1204,23 @@ export default function App() {
       exportPayload,
     });
 
-    downloadFile(`people-rating-report-${safeName}-${exportStamp}.html`, exportHtml, "text/html");
+    downloadFile(createExportFilename(raterName, exportedAt), exportHtml, "text/html");
+  }
+
+  function handleOpenSavedReport(record) {
+    const reportHtml = buildRecordReportHtml(record);
+    openFile(reportHtml, "text/html");
+  }
+
+  function handleDownloadSavedReport(record) {
+    const exportedAt = record?.updatedAt || record?.createdAt || new Date().toISOString();
+    const reportHtml = buildRecordReportHtml(record);
+    const filename =
+      typeof record?.reportFileName === "string" && record.reportFileName
+        ? record.reportFileName
+        : createExportFilename(record?.raterName, exportedAt);
+
+    downloadFile(filename, reportHtml, "text/html");
   }
 
   if (status === "loading") {
@@ -1163,11 +1314,11 @@ export default function App() {
 
           <aside className="side-panel">
             <SystemResultsPanel
-              activityLog={activityLog}
               currentSessionId={sessionId}
+              onDownloadRecordReport={handleDownloadSavedReport}
               onExportData={handleExportData}
+              onOpenRecordReport={handleOpenSavedReport}
               records={revealRecords}
-              storageMode={sharedStatus}
             />
           </aside>
         </section>
@@ -1272,11 +1423,11 @@ export default function App() {
               </section>
 
               <SystemResultsPanel
-                activityLog={activityLog}
                 currentSessionId={sessionId}
+                onDownloadRecordReport={handleDownloadSavedReport}
                 onExportData={handleExportData}
+                onOpenRecordReport={handleOpenSavedReport}
                 records={revealRecords}
-                storageMode={sharedStatus}
               />
             </aside>
           </section>
