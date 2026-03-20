@@ -23,6 +23,7 @@ export default function RatingStepper({
   categories,
   commentsByPerson,
   onCommentChange,
+  onCommentCommit,
   onGoToPerson,
   onNext,
   onPrevious,
@@ -119,6 +120,7 @@ export default function RatingStepper({
             placeholder={`Add notes about ${activePerson.name}, why you scored this way, or anything you want saved in the export.`}
             value={commentsByPerson?.[activePerson.id] ?? ""}
             onChange={(event) => onCommentChange(activePerson.id, event.target.value)}
+            onBlur={(event) => onCommentCommit(activePerson.id, event.target.value)}
           />
         </div>
       </div>

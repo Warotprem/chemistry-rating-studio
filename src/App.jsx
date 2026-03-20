@@ -6,6 +6,13 @@ import RaterIdentityGate from "./components/RaterIdentityGate";
 import SystemResultsPanel from "./components/SystemResultsPanel";
 import { DEFAULT_CATEGORIES } from "./constants";
 import { fetchPeopleRoster } from "./services/peopleService";
+import {
+  fetchSharedActivityLog,
+  fetchSharedRevealRecords,
+  isSharedResultsEnabled,
+  saveSharedActivityEntries,
+  saveSharedRevealRecord,
+} from "./services/sharedResultsService";
 import { buildCoachInsights, buildRaterProfile } from "./utils/conclusions";
 import {
   buildPeopleWithRatings,
@@ -126,9 +133,348 @@ function buildRevealSnapshot({
   };
 }
 
-function downloadJsonFile(filename, data) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], {
-    type: "application/json",
+function createActivityEntryId(entry) {
+  if (typeof window !== "undefined" && typeof window.crypto?.randomUUID === "function") {
+    return window.crypto.randomUUID();
+  }
+
+  return [
+    entry.timestamp,
+    entry.type,
+    entry.sessionId,
+    entry.personId ?? "",
+    entry.category ?? "",
+  ].join("-");
+}
+
+function mergeRevealRecords(...groups) {
+  const merged = new Map();
+
+  groups.flat().forEach((record) => {
+    if (!record?.sessionId) {
+      return;
+    }
+
+    const existing = merged.get(record.sessionId);
+
+    if (!existing || String(record.updatedAt).localeCompare(String(existing.updatedAt)) > 0) {
+      merged.set(record.sessionId, record);
+    }
+  });
+
+  return [...merged.values()].sort((left, right) =>
+    String(right.updatedAt).localeCompare(String(left.updatedAt)),
+  );
+}
+
+function mergeActivityLog(...groups) {
+  const merged = new Map();
+
+  groups.flat().forEach((entry) => {
+    if (!entry?.id) {
+      return;
+    }
+
+    const existing = merged.get(entry.id);
+
+    if (!existing || String(entry.timestamp).localeCompare(String(existing.timestamp)) > 0) {
+      merged.set(entry.id, entry);
+    }
+  });
+
+  return [...merged.values()].sort((left, right) =>
+    String(right.timestamp).localeCompare(String(left.timestamp)),
+  );
+}
+
+function createHtmlSafeText(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function formatPeopleList(names) {
+  return names.length ? names.join(", ") : "No result";
+}
+
+function formatExportDateTime(value) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown";
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+}
+
+function buildReadableExportHtml({ exportedAt, exportPayload }) {
+  const snapshot = exportPayload.currentRevealSnapshot;
+  const topRows = snapshot.rankedRows.slice(0, 10);
+  const commentEntries = Object.entries(snapshot.commentsByPerson).filter(([, value]) =>
+    typeof value === "string" && value.trim(),
+  );
+  const activityRows = exportPayload.activityLog.slice(0, 25);
+
+  const categoryLeaderRows = snapshot.bestByCategory
+    .map(
+      (entry) => `
+        <div class="dense-row">
+          <span>${createHtmlSafeText(entry.category)}</span>
+          <strong>${createHtmlSafeText(formatPeopleList(entry.names))} · ${createHtmlSafeText(formatScore(entry.score))}</strong>
+        </div>`,
+    )
+    .join("");
+
+  const categoryAverageRows = snapshot.categoryAverages
+    .map(
+      (entry) => `
+        <div class="dense-row">
+          <span>${createHtmlSafeText(entry.category)}</span>
+          <strong>${createHtmlSafeText(formatScore(entry.average))}</strong>
+        </div>`,
+    )
+    .join("");
+
+  const rankingRows = topRows
+    .map(
+      (row) => `
+        <tr>
+          <td>${createHtmlSafeText(row.rank ?? "--")}</td>
+          <td>${createHtmlSafeText(row.person.name)}</td>
+          <td>${createHtmlSafeText(formatScore(row.overallScore))}</td>
+          ${snapshot.categories
+            .map(
+              (category) =>
+                `<td>${createHtmlSafeText(formatScore(row.categoryScores?.[category] ?? null))}</td>`,
+            )
+            .join("")}
+        </tr>`,
+    )
+    .join("");
+
+  const coachRows = snapshot.coachInsights
+    .slice(0, 8)
+    .map(
+      (insight) => `
+        <article class="coach-card">
+          <div class="coach-head">
+            <div>
+              <h3>${createHtmlSafeText(insight.name)}</h3>
+              <p>${createHtmlSafeText(insight.scoreboard)}</p>
+            </div>
+            <span class="pill">${createHtmlSafeText(insight.profileTag)}</span>
+          </div>
+          <p class="coach-label">${createHtmlSafeText(insight.instinctLabel)}</p>
+          <p>${createHtmlSafeText(insight.profileVerdict)}</p>
+          <p class="muted">${createHtmlSafeText(insight.coachComment)}</p>
+        </article>`,
+    )
+    .join("");
+
+  const commentRows = commentEntries.length
+    ? commentEntries
+        .map(([personId, comment]) => {
+          const person = snapshot.rosterSnapshot.find((entry) => entry.id === personId);
+          return `
+            <article class="comment-card">
+              <h3>${createHtmlSafeText(person?.name || personId)}</h3>
+              <p>${createHtmlSafeText(comment)}</p>
+            </article>`;
+        })
+        .join("")
+    : `<p class="empty">No comments were saved for this reveal.</p>`;
+
+  const activityLogRows = activityRows
+    .map(
+      (entry) => `
+        <tr>
+          <td>${createHtmlSafeText(formatExportDateTime(entry.timestamp))}</td>
+          <td>${createHtmlSafeText(entry.type)}</td>
+          <td>${createHtmlSafeText(entry.summary || "")}</td>
+        </tr>`,
+    )
+    .join("");
+
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${createHtmlSafeText(`Chemistry Rating Report - ${snapshot.raterName || "Unknown"}`)}</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #14080d;
+        --surface: rgba(43, 14, 23, 0.92);
+        --surface-strong: rgba(62, 20, 32, 0.96);
+        --border: rgba(255, 225, 214, 0.12);
+        --text: #fff3ec;
+        --text-soft: #d6b9b6;
+        --accent: #ff9fb6;
+        --warm: #f6c48d;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Inter", "Segoe UI", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(223, 106, 136, 0.24), transparent 28%),
+          linear-gradient(180deg, #14080d 0%, #281019 48%, #12070b 100%);
+      }
+      main { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 28px 0 56px; }
+      section, article {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        padding: 20px;
+      }
+      h1, h2, h3, p { margin-top: 0; }
+      h1, h2, h3 { font-family: "Georgia", serif; letter-spacing: -0.03em; }
+      .eyebrow, .pill, th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); }
+      .hero { display: grid; gap: 16px; }
+      .hero-meta { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+      .metric { background: rgba(255,255,255,0.04); border-radius: 18px; padding: 14px; }
+      .metric strong { display: block; margin-top: 10px; font-size: 22px; color: var(--text); }
+      .results-grid, .coach-grid, .comments-grid { display: grid; gap: 12px; margin-top: 20px; }
+      .results-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .coach-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .comments-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .result-card { background: var(--surface-strong); }
+      .dense-row { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+      .dense-row:last-child { border-bottom: 0; }
+      .dense-row span, .muted, .empty, td { color: var(--text-soft); }
+      table { width: 100%; border-collapse: collapse; margin-top: 18px; overflow: hidden; border-radius: 20px; background: rgba(255,255,255,0.04); }
+      th, td { padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,0.08); text-align: left; }
+      th { background: rgba(87, 30, 44, 0.84); }
+      .coach-card, .comment-card { background: rgba(255,255,255,0.04); }
+      .coach-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+      .coach-label { color: var(--warm); font-weight: 700; margin: 12px 0; }
+      .pill { display: inline-flex; align-items: center; padding: 8px 11px; border-radius: 999px; background: rgba(255,159,182,0.1); }
+      .section-title { margin: 28px 0 14px; }
+      details { margin-top: 24px; }
+      pre { white-space: pre-wrap; word-break: break-word; color: var(--text-soft); background: rgba(255,255,255,0.04); padding: 16px; border-radius: 16px; overflow: auto; }
+      @media (max-width: 980px) {
+        .results-grid, .coach-grid, .comments-grid, .hero-meta { grid-template-columns: 1fr; }
+        .dense-row, .coach-head { flex-direction: column; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Saved Reveal Report</p>
+          <h1>Chemistry ranking and summary</h1>
+          <p class="muted">Saved for ${createHtmlSafeText(snapshot.raterName || "Unknown")} · Exported ${createHtmlSafeText(formatExportDateTime(exportedAt))}</p>
+        </div>
+        <div class="hero-meta">
+          <div class="metric">
+            <span class="eyebrow">Top overall</span>
+            <strong>${createHtmlSafeText(formatPeopleList(snapshot.bestOverall.names))}</strong>
+            <p>${createHtmlSafeText(formatScore(snapshot.bestOverall.score))}</p>
+          </div>
+          <div class="metric">
+            <span class="eyebrow">Girls analyzed</span>
+            <strong>${createHtmlSafeText(snapshot.analyzedCount)}</strong>
+            <p>${createHtmlSafeText(`${snapshot.peopleCount} in roster`)}</p>
+          </div>
+          <div class="metric">
+            <span class="eyebrow">Saved comments</span>
+            <strong>${createHtmlSafeText(commentEntries.length)}</strong>
+            <p>Notes included in this report</p>
+          </div>
+          <div class="metric">
+            <span class="eyebrow">Activity log</span>
+            <strong>${createHtmlSafeText(exportPayload.activityLog.length)}</strong>
+            <p>Recorded actions</p>
+          </div>
+        </div>
+      </section>
+
+      <div class="results-grid">
+        <article class="result-card">
+          <p class="eyebrow">Category leaders</p>
+          ${categoryLeaderRows}
+        </article>
+        <article class="result-card">
+          <p class="eyebrow">Category averages</p>
+          ${categoryAverageRows}
+        </article>
+        <article class="result-card">
+          <p class="eyebrow">Rater profile</p>
+          <h3>${createHtmlSafeText(snapshot.raterProfile?.headline || "No profile")}</h3>
+          <p>${createHtmlSafeText(snapshot.raterProfile?.summary || "No profile summary available.")}</p>
+          <p class="muted">${createHtmlSafeText(snapshot.raterProfile?.overallVerdict || "")}</p>
+        </article>
+        <article class="result-card">
+          <p class="eyebrow">Generated summary</p>
+          <h3>${createHtmlSafeText(snapshot.generatedSummary?.revealHeadline || "No summary")}</h3>
+          <p>${createHtmlSafeText(snapshot.generatedSummary?.profileSummary || "")}</p>
+          <p class="muted">${createHtmlSafeText(snapshot.generatedSummary?.coachSummary || "")}</p>
+        </article>
+      </div>
+
+      <h2 class="section-title">Ranking</h2>
+      <section>
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Girl</th>
+              <th>Overall</th>
+              ${snapshot.categories.map((category) => `<th>${createHtmlSafeText(category)}</th>`).join("")}
+            </tr>
+          </thead>
+          <tbody>
+            ${rankingRows}
+          </tbody>
+        </table>
+      </section>
+
+      <h2 class="section-title">Assessment</h2>
+      <div class="coach-grid">
+        ${coachRows}
+      </div>
+
+      <h2 class="section-title">Comments</h2>
+      <div class="comments-grid">
+        ${commentRows}
+      </div>
+
+      <h2 class="section-title">Recent activity</h2>
+      <section>
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Type</th>
+              <th>Summary</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${activityLogRows}
+          </tbody>
+        </table>
+      </section>
+
+      <details>
+        <summary>Raw data</summary>
+        <pre>${createHtmlSafeText(JSON.stringify(exportPayload, null, 2))}</pre>
+      </details>
+    </main>
+  </body>
+</html>`;
+}
+
+function downloadFile(filename, contents, type) {
+  const blob = new Blob([contents], {
+    type,
   });
   const url = window.URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -143,6 +489,7 @@ function downloadJsonFile(filename, data) {
 }
 
 export default function App() {
+  const sharedResultsEnabled = isSharedResultsEnabled();
   const [people, setPeople] = useState([]);
   const [ratingsByPerson, setRatingsByPerson] = useState({});
   const [commentsByPerson, setCommentsByPerson] = useState({});
@@ -155,7 +502,9 @@ export default function App() {
   const [nameError, setNameError] = useState("");
   const [revealRecords, setRevealRecords] = useState([]);
   const [activityLog, setActivityLog] = useState([]);
+  const [sharedStatus, setSharedStatus] = useState(sharedResultsEnabled ? "connecting" : "local");
   const resultsRef = useRef(null);
+  const syncedActivityIdsRef = useRef(new Set());
 
   useEffect(() => {
     let mounted = true;
@@ -165,6 +514,8 @@ export default function App() {
         const roster = await fetchPeopleRoster();
         const storedSession = loadStoredSession();
         const nextSessionId = storedSession.sessionId || createClientSessionId();
+        const localRevealRecords = loadStoredRevealRecords();
+        const localActivityLog = loadStoredActivityLog();
 
         if (!mounted) {
           return;
@@ -177,8 +528,41 @@ export default function App() {
         setRaterName(storedSession.raterName);
         setPendingRaterName(storedSession.raterName);
         setSessionId(nextSessionId);
-        setRevealRecords(loadStoredRevealRecords());
-        setActivityLog(loadStoredActivityLog());
+        setRevealRecords(localRevealRecords);
+        setActivityLog(localActivityLog);
+        syncedActivityIdsRef.current = new Set();
+
+        if (sharedResultsEnabled) {
+          try {
+            const [remoteRevealRecords, remoteActivityLog] = await Promise.all([
+              fetchSharedRevealRecords(),
+              fetchSharedActivityLog(),
+            ]);
+
+            if (!mounted) {
+              return;
+            }
+
+            const mergedRevealRecords = mergeRevealRecords(remoteRevealRecords, localRevealRecords);
+            const mergedActivityLog = mergeActivityLog(remoteActivityLog, localActivityLog);
+
+            setRevealRecords(mergedRevealRecords);
+            setActivityLog(mergedActivityLog);
+            syncedActivityIdsRef.current = new Set(
+              remoteActivityLog.map((entry) => entry.id).filter(Boolean),
+            );
+            setSharedStatus("shared");
+          } catch {
+            if (!mounted) {
+              return;
+            }
+
+            setSharedStatus("error");
+          }
+        } else {
+          setSharedStatus("local");
+        }
+
         setStatus("ready");
       } catch {
         if (!mounted) {
@@ -194,7 +578,7 @@ export default function App() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [sharedResultsEnabled]);
 
   useEffect(() => {
     if (status !== "ready" || !people.length) {
@@ -230,6 +614,48 @@ export default function App() {
 
     saveStoredActivityLog(activityLog);
   }, [activityLog, status]);
+
+  useEffect(() => {
+    if (status !== "ready" || !sharedResultsEnabled) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function refreshSharedResults() {
+      try {
+        const [remoteRevealRecords, remoteActivityLog] = await Promise.all([
+          fetchSharedRevealRecords(),
+          fetchSharedActivityLog(),
+        ]);
+
+        if (cancelled) {
+          return;
+        }
+
+        setRevealRecords((current) => mergeRevealRecords(remoteRevealRecords, current));
+        setActivityLog((current) => mergeActivityLog(remoteActivityLog, current));
+        remoteActivityLog.forEach((entry) => {
+          if (entry.id) {
+            syncedActivityIdsRef.current.add(entry.id);
+          }
+        });
+        setSharedStatus("shared");
+      } catch {
+        if (!cancelled) {
+          setSharedStatus("error");
+        }
+      }
+    }
+
+    refreshSharedResults();
+    const intervalId = window.setInterval(refreshSharedResults, 20000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [sharedResultsEnabled, status]);
 
   useEffect(() => {
     document.title = "People Rating Flow";
@@ -332,27 +758,104 @@ export default function App() {
       return;
     }
 
-    const nextRecords = upsertStoredRevealRecord({
+    const snapshotToStore = {
       ...baseRevealSnapshot,
       updatedAt: new Date().toISOString(),
-    });
+    };
+    const nextRecords = upsertStoredRevealRecord(snapshotToStore);
 
     setRevealRecords(nextRecords);
-  }, [baseRevealSnapshot, hasMinimumProfiles, raterName, sessionId, showResults, status]);
+
+    if (!sharedResultsEnabled) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function syncRevealRecord() {
+      try {
+        const savedRecord = await saveSharedRevealRecord(snapshotToStore);
+
+        if (cancelled || !savedRecord) {
+          return;
+        }
+
+        setRevealRecords((current) => mergeRevealRecords([savedRecord], current));
+        setSharedStatus("shared");
+      } catch {
+        if (!cancelled) {
+          setSharedStatus("error");
+        }
+      }
+    }
+
+    syncRevealRecord();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [baseRevealSnapshot, hasMinimumProfiles, raterName, sessionId, sharedResultsEnabled, showResults, status]);
+
+  useEffect(() => {
+    if (status !== "ready" || !sharedResultsEnabled || !activityLog.length) {
+      return;
+    }
+
+    const unsyncedEntries = activityLog.filter(
+      (entry) => entry.id && !syncedActivityIdsRef.current.has(entry.id),
+    );
+
+    if (!unsyncedEntries.length) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function syncActivityLog() {
+      try {
+        const savedEntries = await saveSharedActivityEntries(unsyncedEntries);
+
+        if (cancelled) {
+          return;
+        }
+
+        savedEntries.forEach((entry) => {
+          if (entry.id) {
+            syncedActivityIdsRef.current.add(entry.id);
+          }
+        });
+        setSharedStatus("shared");
+      } catch {
+        if (!cancelled) {
+          setSharedStatus("error");
+        }
+      }
+    }
+
+    syncActivityLog();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activityLog, sharedResultsEnabled, status]);
 
   function appendActivityEntry(entry, overrides = {}) {
     const timestamp = new Date().toISOString();
-
-    setActivityLog((current) => [
-      {
-        timestamp,
-        sessionId,
-        raterName,
-        ...overrides,
+    const nextEntry = {
+      id: createActivityEntryId({
         ...entry,
-      },
-      ...current,
-    ]);
+        ...overrides,
+        timestamp,
+        sessionId: overrides.sessionId ?? sessionId,
+      }),
+      timestamp,
+      sessionId,
+      raterName,
+      ...overrides,
+      ...entry,
+    };
+
+    setActivityLog((current) => [nextEntry, ...current]);
   }
 
   function handleRatingChange(personId, category, value) {
@@ -377,12 +880,14 @@ export default function App() {
   }
 
   function handleCommentChange(personId, value) {
-    const person = people.find((entry) => entry.id === personId);
-
     setCommentsByPerson((current) => ({
       ...current,
       [personId]: value,
     }));
+  }
+
+  function handleCommentCommit(personId, value) {
+    const person = people.find((entry) => entry.id === personId);
 
     appendActivityEntry({
       type: "comment_updated",
@@ -514,6 +1019,11 @@ export default function App() {
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-+|-+$/g, "") || "system";
     const exportLogEntry = {
+      id: createActivityEntryId({
+        timestamp: exportedAt,
+        type: "data_exported",
+        sessionId,
+      }),
       timestamp: exportedAt,
       sessionId,
       raterName,
@@ -527,6 +1037,10 @@ export default function App() {
     };
     const nextActivityLog = [exportLogEntry, ...activityLog];
 
+    const currentRevealSnapshot = {
+      ...baseRevealSnapshot,
+      updatedAt: exportedAt,
+    };
     const exportPayload = {
       exportedAt,
       app: "people-rating-flow",
@@ -543,17 +1057,19 @@ export default function App() {
         ratingsByPerson,
         commentsByPerson,
       },
-      currentRevealSnapshot: {
-        ...baseRevealSnapshot,
-        updatedAt: exportedAt,
-      },
+      currentRevealSnapshot,
       revealRecords,
       activityLog: nextActivityLog,
     };
 
     setActivityLog(nextActivityLog);
 
-    downloadJsonFile(`people-rating-export-${safeName}-${exportStamp}.json`, exportPayload);
+    const exportHtml = buildReadableExportHtml({
+      exportedAt,
+      exportPayload,
+    });
+
+    downloadFile(`people-rating-report-${safeName}-${exportStamp}.html`, exportHtml, "text/html");
   }
 
   if (status === "loading") {
@@ -651,6 +1167,7 @@ export default function App() {
               currentSessionId={sessionId}
               onExportData={handleExportData}
               records={revealRecords}
+              storageMode={sharedStatus}
             />
           </aside>
         </section>
@@ -662,6 +1179,7 @@ export default function App() {
               categories={DEFAULT_CATEGORIES}
               commentsByPerson={commentsByPerson}
               onCommentChange={handleCommentChange}
+              onCommentCommit={handleCommentCommit}
               onGoToPerson={handleGoToPerson}
               onNext={handleNext}
               onPrevious={handlePrevious}
@@ -758,6 +1276,7 @@ export default function App() {
                 currentSessionId={sessionId}
                 onExportData={handleExportData}
                 records={revealRecords}
+                storageMode={sharedStatus}
               />
             </aside>
           </section>

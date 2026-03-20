@@ -314,6 +314,15 @@ function sanitizeActivityLogEntry(entry) {
     return null;
   }
 
+  const fallbackId = [
+    typeof entry.timestamp === "string" ? entry.timestamp : "",
+    typeof entry.type === "string" ? entry.type : "",
+    typeof entry.sessionId === "string" ? entry.sessionId : "",
+    typeof entry.personId === "string" ? entry.personId : "",
+    typeof entry.category === "string" ? entry.category : "",
+    entry.value ?? "",
+    typeof entry.summary === "string" ? entry.summary : "",
+  ].join("|");
   const timestamp = typeof entry.timestamp === "string" ? entry.timestamp : "";
   const type = typeof entry.type === "string" ? entry.type : "";
   const sessionId = typeof entry.sessionId === "string" ? entry.sessionId : "";
@@ -324,6 +333,7 @@ function sanitizeActivityLogEntry(entry) {
   }
 
   return {
+    id: typeof entry.id === "string" && entry.id ? entry.id : fallbackId,
     timestamp,
     type,
     sessionId,

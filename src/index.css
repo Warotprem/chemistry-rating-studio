@@ -914,6 +914,69 @@ button {
   flex: 1;
 }
 
+.system-record__results {
+  display: grid;
+  gap: 14px;
+}
+
+.system-record__snapshot {
+  display: grid;
+  gap: 12px;
+}
+
+.system-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.system-mini-card {
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 228, 220, 0.08);
+}
+
+.system-mini-card--feature {
+  background:
+    linear-gradient(180deg, rgba(223, 106, 136, 0.18), rgba(255, 205, 186, 0.06)),
+    rgba(255, 255, 255, 0.04);
+}
+
+.system-mini-card h3,
+.system-mini-card p,
+.system-mini-card strong {
+  margin: 0;
+}
+
+.system-mini-card h3 {
+  font-size: 1.15rem;
+  line-height: 1.15;
+}
+
+.system-mini-card p {
+  color: var(--text-soft);
+  line-height: 1.55;
+}
+
+.system-mini-card strong {
+  display: block;
+  margin-top: 10px;
+  font-size: 1.05rem;
+}
+
+.system-dense-list {
+  display: grid;
+  gap: 8px;
+}
+
+.system-ranking-wrap {
+  overflow-x: auto;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 228, 220, 0.08);
+  background: rgba(255, 247, 243, 0.05);
+}
+
 .system-records__empty {
   margin: 0;
   line-height: 1.6;
@@ -945,7 +1008,8 @@ button {
   .hero-panel,
   .content-grid,
   .results-grid,
-  .coach-grid {
+  .coach-grid,
+  .system-mini-grid {
     grid-template-columns: 1fr;
   }
 
