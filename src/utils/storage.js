@@ -29,7 +29,13 @@ function sanitizeReportHtml(value) {
 
 function sanitizeCommentsByPerson(input, people) {
   return Object.fromEntries(
-    people.map((person) => [person.id, sanitizeComment(input?.[person.id])]),
+    people.map((person) => {
+      const storedValue = sanitizeComment(input?.[person.id]);
+      const seededSummary =
+        typeof person.summary === "string" ? sanitizeComment(person.summary) : "";
+
+      return [person.id, storedValue === seededSummary ? "" : storedValue];
+    }),
   );
 }
 

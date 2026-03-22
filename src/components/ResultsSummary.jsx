@@ -18,16 +18,96 @@ export default function ResultsSummary({
   raterProfile,
   rankedRows,
 }) {
+  const topRows = rankedRows.filter((row) => row.displayRank !== null).slice(0, 3);
+  const leadNames = formatPeople(bestOverall.people);
+  const leadInsight = coachInsights[0];
+  const profileSummaryById = Object.fromEntries(
+    rankedRows.map((row) => [row.person.id, typeof row.person.summary === "string" ? row.person.summary.trim() : ""]),
+  );
+
   return (
     <section ref={sectionRef} className="results-panel">
       <div className="panel-head">
         <div>
           <p className="eyebrow">Final reveal</p>
+          <span className="results-panel__stamp">Ranking report</span>
           <h2>Chemistry ranking and summary</h2>
           <p className="results-panel__subhead">Saved for {raterName}</p>
         </div>
         <span className="completion-badge completion-badge--done">Complete score set collected</span>
       </div>
+
+      <div className="results-report-head">
+        <section className="results-lead-callout">
+          <p className="result-card__label">Lead statement</p>
+          <h3>
+            {leadNames} set the pace at {formatScore(bestOverall.score)} overall.
+          </h3>
+          <p>
+            {raterProfile?.summary ||
+              "The board now has enough completed profiles to show a real pattern instead of loose guesses."}
+          </p>
+        </section>
+
+        <div className="results-hero-band">
+          <div>
+            <p className="result-card__label">Lead result</p>
+            <strong>{formatPeople(bestOverall.people)}</strong>
+            <span>Highest overall board score at reveal time.</span>
+          </div>
+          <div>
+            <p className="result-card__label">Overall score</p>
+            <strong>{formatScore(bestOverall.score)}</strong>
+            <span>Calculated from the completed category average.</span>
+          </div>
+          <div>
+            <p className="result-card__label">Profiles analyzed</p>
+            <strong>{analyzedCount}</strong>
+            <span>Completed profiles included in this report.</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="results-insight-strip">
+        <article className="results-insight-card results-insight-card--feature">
+          <p className="result-card__label">Rater profile</p>
+          <h3>{raterProfile?.headline || "Profile still forming"}</h3>
+          <p>
+            {raterProfile?.overallVerdict ||
+              "Reveal more completed profiles to make the taste profile sharper."}
+          </p>
+        </article>
+
+        <article className="results-insight-card">
+          <p className="result-card__label">Lead read</p>
+          <h3>{leadInsight?.name || "No assessment yet"}</h3>
+          <p>
+            {leadInsight?.coachComment ||
+              "Once the reveal is available, the strongest profile note will surface here."}
+          </p>
+        </article>
+      </div>
+
+      {topRows.length ? (
+        <div className="results-podium">
+          {topRows.map((row, index) => (
+            <article
+              key={row.person.id}
+              className={`podium-card ${index === 0 ? "podium-card--lead" : ""}`}
+            >
+              <p className="result-card__label">
+                {index === 0 ? "Current leader" : `Place ${index + 1}`}
+              </p>
+              <h3>{row.person.name}</h3>
+              <strong>{formatScore(row.overallScore)}</strong>
+              <span>
+                {row.displayRank ? `Rank ${row.displayRank}` : "Unranked"} ·{" "}
+                {row.person.role || "Scored profile"}
+              </span>
+            </article>
+          ))}
+        </div>
+      ) : null}
 
       <div className="results-grid">
         <article className="result-card result-card--feature">
@@ -95,8 +175,13 @@ export default function ResultsSummary({
           </thead>
           <tbody>
             {rankedRows.map((row) => (
-              <tr key={row.person.id}>
-                <td>{row.displayRank ?? "--"}</td>
+              <tr
+                key={row.person.id}
+                className={row.displayRank && row.displayRank <= 3 ? "ranking-row--top" : ""}
+              >
+                <td>
+                  <span className="rank-badge">{row.displayRank ?? "--"}</span>
+                </td>
                 <td>
                   <div className="person-cell">
                     <strong>{row.person.name}</strong>
@@ -165,6 +250,9 @@ export default function ResultsSummary({
                 <strong>{insight.instinctLabel}</strong>
               </div>
 
+              {profileSummaryById[insight.id] ? (
+                <p className="coach-card__comment">{profileSummaryById[insight.id]}</p>
+              ) : null}
               <p>{insight.profileVerdict}</p>
               <p className="coach-card__note">{insight.coachComment}</p>
             </article>

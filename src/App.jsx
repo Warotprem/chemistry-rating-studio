@@ -1,10 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, CheckCircle2, LockKeyhole, RotateCcw, Sparkles } from "lucide-react";
+import {
+  ArrowRight,
+  CheckCircle2,
+  Fingerprint,
+  LockKeyhole,
+  RotateCcw,
+  SlidersHorizontal,
+  Sparkles,
+  Trophy,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
 import RatingStepper from "./components/RatingStepper";
 import ResultsSummary from "./components/ResultsSummary";
 import RaterIdentityGate from "./components/RaterIdentityGate";
 import SystemResultsPanel from "./components/SystemResultsPanel";
-import { DEFAULT_CATEGORIES } from "./constants";
+import BoardMatrix from "./components/BoardMatrix";
+import ConnectedFieldCanvas from "./components/ConnectedFieldCanvas";
+import { DEFAULT_CATEGORIES, RATING_MAX } from "./constants";
+import useSoundscape from "./hooks/useSoundscape";
 import { fetchPeopleRoster } from "./services/peopleService";
 import {
   fetchSharedActivityLog,
@@ -567,6 +581,24 @@ export default function App() {
   const resultsRef = useRef(null);
   const syncedActivityIdsRef = useRef(new Set());
   const grayDetectorTimeoutRef = useRef(null);
+  const cursorLabelRef = useRef(null);
+  const cursorMotionRef = useRef({
+    x: 0,
+    y: 0,
+    timestamp: 0,
+  });
+  const {
+    soundEnabled,
+    soundUnlocked,
+    toggleSound,
+    playExport,
+    playHover,
+    playReset,
+    playReveal,
+    playSlider,
+    playStart,
+    playStep,
+  } = useSoundscape();
 
   useEffect(() => {
     let mounted = true;
@@ -723,6 +755,261 @@ export default function App() {
     document.title = "People Rating Flow";
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const root = document.documentElement;
+    const cursorLabelNode = cursorLabelRef.current;
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const targetCursor = {
+      x: window.innerWidth / 2,
+      y: window.innerHeight / 2,
+      speed: 0,
+      angle: 0,
+    };
+    const smoothCursor = {
+      x: targetCursor.x,
+      y: targetCursor.y,
+      speed: 0,
+    };
+    let animationFrameId = 0;
+
+    function setCursorLabel(value) {
+      if (!cursorLabelNode) {
+        return;
+      }
+
+      const label = typeof value === "string" ? value.trim().replace(/\s+/g, " ").slice(0, 20) : "";
+
+      cursorLabelNode.textContent = label;
+      cursorLabelNode.dataset.visible = label ? "true" : "false";
+    }
+
+    function resolveCursorState(target) {
+      if (!(target instanceof Element)) {
+        return {
+          mode: "default",
+          label: "",
+        };
+      }
+
+      if (target.closest('input[type="range"], .category-card')) {
+        return {
+          mode: "rate",
+          label: "Rate",
+        };
+      }
+
+      if (target.closest("textarea, input:not([type='range'])")) {
+        return {
+          mode: "text",
+          label: "Type",
+        };
+      }
+
+      const buttonTarget = target.closest("button, [role='button']");
+
+      if (buttonTarget) {
+        const rawText =
+          buttonTarget.getAttribute("data-cursor-label") ||
+          buttonTarget.getAttribute("aria-label") ||
+          buttonTarget.textContent ||
+          "";
+        const normalizedText = rawText.trim().replace(/\s+/g, " ").toLowerCase();
+        let label = "Select";
+
+        if (normalizedText.includes("export")) {
+          label = "Export";
+        } else if (normalizedText.includes("reveal")) {
+          label = "Reveal";
+        } else if (normalizedText.includes("start")) {
+          label = "Start";
+        } else if (normalizedText.includes("reset")) {
+          label = "Reset";
+        } else if (normalizedText.includes("switch")) {
+          label = "Switch";
+        } else if (normalizedText.includes("next")) {
+          label = "Next";
+        } else if (normalizedText.includes("previous")) {
+          label = "Back";
+        }
+
+        return {
+          mode: "action",
+          label,
+        };
+      }
+
+      if (target.closest(".progress-person")) {
+        return {
+          mode: "inspect",
+          label: "Jump",
+        };
+      }
+
+      if (
+        target.closest(
+          ".result-card, .podium-card, .coach-card, .summary-card, .locked-card, .signal-stage__lead-card, .signal-stage__support-card, .signal-stage__band",
+        )
+      ) {
+        return {
+          mode: "inspect",
+          label: "",
+        };
+      }
+
+      return {
+        mode: "default",
+        label: "",
+      };
+    }
+
+    function setPointerPosition(event) {
+      if (event.pointerType && event.pointerType !== "mouse") {
+        root.dataset.cursorVisible = "false";
+        return;
+      }
+
+      const now = performance.now();
+      const previous = cursorMotionRef.current;
+      const deltaX = event.clientX - previous.x;
+      const deltaY = event.clientY - previous.y;
+      const deltaTime = Math.max(now - previous.timestamp, 16);
+      const distance = Math.hypot(deltaX, deltaY);
+      const speed = Math.min(distance / deltaTime / 1.2, 1.4);
+      const angle = distance > 0.5 ? Math.atan2(deltaY, deltaX) : 0;
+
+      root.style.setProperty("--cursor-x", `${event.clientX}px`);
+      root.style.setProperty("--cursor-y", `${event.clientY}px`);
+        root.style.setProperty("--cursor-speed", speed.toFixed(3));
+        root.style.setProperty("--cursor-angle", `${angle}rad`);
+      root.dataset.cursorVisible = "true";
+
+      targetCursor.x = event.clientX;
+      targetCursor.y = event.clientY;
+      targetCursor.speed = speed;
+      targetCursor.angle = angle;
+
+      cursorMotionRef.current = {
+        x: event.clientX,
+        y: event.clientY,
+        timestamp: now,
+      };
+    }
+
+    function handlePointerDown() {
+      root.dataset.pointerDown = "true";
+    }
+
+    function handlePointerUp() {
+      root.dataset.pointerDown = "false";
+    }
+
+    function updateCursorMode(event) {
+      const target = event.target;
+      const nextCursorState = resolveCursorState(target);
+      const previousMode = root.dataset.cursorMode || "default";
+
+      root.dataset.cursorMode = nextCursorState.mode;
+      setCursorLabel(nextCursorState.label);
+
+      if (
+        nextCursorState.mode !== previousMode &&
+        (nextCursorState.mode === "action" ||
+          nextCursorState.mode === "rate" ||
+          nextCursorState.mode === "inspect")
+      ) {
+        playHover(nextCursorState.mode);
+      }
+    }
+
+    function handlePointerLeave() {
+      root.dataset.cursorVisible = "false";
+      root.dataset.cursorMode = "default";
+      setCursorLabel("");
+    }
+
+    function animateCursorField() {
+      const motionEase = prefersReducedMotion ? 0.36 : 0.11;
+      const speedEase = prefersReducedMotion ? 0.34 : 0.08;
+
+      smoothCursor.x += (targetCursor.x - smoothCursor.x) * motionEase;
+      smoothCursor.y += (targetCursor.y - smoothCursor.y) * motionEase;
+      smoothCursor.speed += (targetCursor.speed - smoothCursor.speed) * speedEase;
+
+      const normalizedX = smoothCursor.x / window.innerWidth - 0.5;
+      const normalizedY = smoothCursor.y / window.innerHeight - 0.5;
+      const softX = normalizedX * 5;
+      const softY = normalizedY * 5;
+      const mediumX = normalizedX * 10;
+      const mediumY = normalizedY * 10;
+      const strongX = normalizedX * 16;
+      const strongY = normalizedY * 16;
+
+      root.style.setProperty("--cursor-smooth-x", `${smoothCursor.x}px`);
+      root.style.setProperty("--cursor-smooth-y", `${smoothCursor.y}px`);
+      root.style.setProperty("--cursor-shift-x-soft", `${softX}px`);
+      root.style.setProperty("--cursor-shift-y-soft", `${softY}px`);
+      root.style.setProperty("--cursor-shift-x-medium", `${mediumX}px`);
+      root.style.setProperty("--cursor-shift-y-medium", `${mediumY}px`);
+      root.style.setProperty("--cursor-shift-x-strong", `${strongX}px`);
+      root.style.setProperty("--cursor-shift-y-strong", `${strongY}px`);
+      root.style.setProperty("--cursor-orbit-x", `${normalizedX * 72}px`);
+      root.style.setProperty("--cursor-orbit-y", `${normalizedY * 72}px`);
+      root.style.setProperty("--cursor-field-bloom", `${0.92 + smoothCursor.speed * 0.22}`);
+      root.style.setProperty("--cursor-field-alpha", `${0.12 + smoothCursor.speed * 0.05}`);
+      root.style.setProperty("--cursor-field-spark", `${0.2 + smoothCursor.speed * 0.12}`);
+      root.style.setProperty("--cursor-field-drift", `${0.42 + smoothCursor.speed * 0.16}`);
+
+      animationFrameId = window.requestAnimationFrame(animateCursorField);
+    }
+
+    window.addEventListener("pointermove", setPointerPosition);
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
+    window.addEventListener("pointerover", updateCursorMode);
+    window.addEventListener("pointerleave", handlePointerLeave);
+    window.addEventListener("blur", handlePointerLeave);
+    root.dataset.pointerDown = "false";
+    root.dataset.cursorMode = "default";
+    root.dataset.cursorVisible = "false";
+    root.style.setProperty("--cursor-speed", "0");
+    root.style.setProperty("--cursor-angle", "0rad");
+    root.style.setProperty("--cursor-smooth-x", `${targetCursor.x}px`);
+    root.style.setProperty("--cursor-smooth-y", `${targetCursor.y}px`);
+    root.style.setProperty("--cursor-shift-x-soft", "0px");
+    root.style.setProperty("--cursor-shift-y-soft", "0px");
+    root.style.setProperty("--cursor-shift-x-medium", "0px");
+    root.style.setProperty("--cursor-shift-y-medium", "0px");
+    root.style.setProperty("--cursor-shift-x-strong", "0px");
+    root.style.setProperty("--cursor-shift-y-strong", "0px");
+    root.style.setProperty("--cursor-orbit-x", "0px");
+    root.style.setProperty("--cursor-orbit-y", "0px");
+    root.style.setProperty("--cursor-field-bloom", "1");
+    root.style.setProperty("--cursor-field-alpha", "0.24");
+    root.style.setProperty("--cursor-field-spark", "0.52");
+    root.style.setProperty("--cursor-field-drift", "0.72");
+    setCursorLabel("");
+    animationFrameId = window.requestAnimationFrame(animateCursorField);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrameId);
+      window.removeEventListener("pointermove", setPointerPosition);
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
+      window.removeEventListener("pointerover", updateCursorMode);
+      window.removeEventListener("pointerleave", handlePointerLeave);
+      window.removeEventListener("blur", handlePointerLeave);
+      delete root.dataset.pointerDown;
+      delete root.dataset.cursorMode;
+      delete root.dataset.cursorVisible;
+    };
+  }, []);
+
   useEffect(
     () => () => {
       if (grayDetectorTimeoutRef.current) {
@@ -817,6 +1104,36 @@ export default function App() {
       sessionId,
     ],
   );
+
+  const overallProgressPercent = people.length ? Math.round((completedPeople / people.length) * 100) : 0;
+  const revealProgressPercent = Math.min(
+    100,
+    Math.round((completedPeople / MIN_COMPLETED_PROFILES) * 100),
+  );
+  const revealProfilesLeft = Math.max(MIN_COMPLETED_PROFILES - completedPeople, 0);
+  const provisionalLeader = bestOverall.people[0]?.name || "No leader yet";
+  const hottestCategory = [...categoryAverages]
+    .filter((entry) => entry.average !== null)
+    .sort((left, right) => right.average - left.average)[0];
+  const revealSignalLabel = !raterName
+    ? "Awaiting rater identity"
+    : hasMinimumProfiles
+      ? "Reveal signal live"
+      : revealProfilesLeft === 1
+        ? "One profile away"
+        : `${revealProfilesLeft} profiles to reveal`;
+  const signalTapeItems = [
+    `Rater: ${raterName || "Not set"}`,
+    `Reveal status: ${hasMinimumProfiles ? "Ready" : `${revealProfilesLeft} left`}`,
+    `Provisional leader: ${
+      bestOverall.score !== null ? `${provisionalLeader} at ${formatScore(bestOverall.score)}` : "No completed leader yet"
+    }`,
+    `Hottest category: ${
+      hottestCategory ? `${hottestCategory.category} at ${formatScore(hottestCategory.average)}` : "No category average yet"
+    }`,
+    `Board progress: ${completedPeople}/${people.length} completed`,
+    `Saved logs: ${activityLog.length}`,
+  ];
 
   function buildReportHtml({
     exportedAt,
@@ -975,6 +1292,7 @@ export default function App() {
     setGrayDetectorName("");
     setNameError("");
     setActiveIndex(0);
+    playStart();
     appendActivityEntry(
       {
         type: "session_started",
@@ -997,6 +1315,7 @@ export default function App() {
         [category]: value,
       },
     }));
+    playSlider(value, RATING_MAX);
 
     appendActivityEntry({
       type: "rating_changed",
@@ -1031,14 +1350,17 @@ export default function App() {
   }
 
   function handleNext() {
+    playStep("next");
     setActiveIndex((current) => Math.min(current + 1, Math.max(people.length - 1, 0)));
   }
 
   function handlePrevious() {
+    playStep("previous");
     setActiveIndex((current) => Math.max(current - 1, 0));
   }
 
   function handleGoToPerson(index) {
+    playStep("next");
     setActiveIndex(index);
   }
 
@@ -1049,6 +1371,7 @@ export default function App() {
       return;
     }
 
+    playReset();
     clearStoredRatings();
     clearStoredComments();
     setRatingsByPerson(createEmptyRatingsMap(people, DEFAULT_CATEGORIES));
@@ -1102,6 +1425,7 @@ export default function App() {
       return;
     }
 
+    playReset();
     if (grayDetectorTimeoutRef.current) {
       window.clearTimeout(grayDetectorTimeoutRef.current);
       grayDetectorTimeoutRef.current = null;
@@ -1131,6 +1455,7 @@ export default function App() {
       return;
     }
 
+    playReveal();
     setShowResults(true);
     appendActivityEntry({
       type: "results_revealed",
@@ -1194,6 +1519,7 @@ export default function App() {
       exportPayload,
     });
 
+    playExport();
     downloadFile(createExportFilename(raterName, exportedAt), exportHtml, "text/html");
   }
 
@@ -1238,52 +1564,217 @@ export default function App() {
 
   return (
     <main className="app-shell">
+      <div className="scene-backdrop" aria-hidden="true">
+        <ConnectedFieldCanvas />
+        <span className="scene-backdrop__field scene-backdrop__field--aurora" />
+        <span className="scene-backdrop__nebula scene-backdrop__nebula--one" />
+        <span className="scene-backdrop__nebula scene-backdrop__nebula--two" />
+        <span className="scene-backdrop__stars scene-backdrop__stars--far" />
+        <span className="scene-backdrop__stars scene-backdrop__stars--near" />
+        <span className="scene-backdrop__beam scene-backdrop__beam--left" />
+        <span className="scene-backdrop__beam scene-backdrop__beam--right" />
+        <span className="scene-backdrop__ring scene-backdrop__ring--one" />
+        <span className="scene-backdrop__ring scene-backdrop__ring--two" />
+        <span className="scene-backdrop__grain" />
+      </div>
+
       <section className="hero-panel">
         <div className="hero-copy">
           <span className="eyebrow">
             <Sparkles size={16} />
-            Chemistry Rating Studio
+            Shared rating system
           </span>
-          <h1>Rate any girls you want. You can reveal results once at least five full girls are complete.</h1>
-          <p>
-            Rate any girls you want in any order. Once at least five full girls are done, the
-            reveal unlocks, saves the full dataset under the rater's name, and keeps updating as
-            you finish more.
+          <p className="hero-kicker">
+            {!raterName
+              ? "Identity required before the board begins."
+              : hasMinimumProfiles
+                ? "Reveal unlocked. The board is ready to open."
+                : "Scoring in progress. The reveal opens after five completed profiles."}
           </p>
-          <div className="hero-note">
-            Finish rule: complete any 5 girls to unlock the conclusions. Ratings, comments, logs, and summaries are stored and exportable.
+          <h1>Chemistry Rating Studio</h1>
+          <p className="hero-copy__promise">
+            Reveal a shared ranking after five completed profiles, then keep sharpening the board
+            in real time.
+          </p>
+          <p className="hero-copy__lead">
+            Identity, scoring, comments, summaries, exports, and saved reveals all stay attached
+            to the active rater session.
+          </p>
+          <div className="hero-meta-strip">
+            <span>Shared saves</span>
+            <span>Readable HTML export</span>
+            <span>Live reveal progression</span>
           </div>
         </div>
 
         <div className="hero-progress">
-          <div className="hero-progress__row">
-            <span>Girls completed</span>
-            <strong>
-              {completedPeople}/{people.length}
-            </strong>
-          </div>
-          <div className="hero-progress__row">
-            <span>Reveal threshold</span>
-            <strong>{MIN_COMPLETED_PROFILES} full girls</strong>
-          </div>
-          <div className="hero-progress__row">
-            <span>Saved logs</span>
-            <strong>{activityLog.length}</strong>
-          </div>
-          <div className="hero-progress__row">
-            <span>Rater</span>
-            <strong>{raterName || "Name required"}</strong>
-          </div>
-          <div className="hero-progress__row">
-            <span>Status</span>
-            <strong>
+          <div className="hero-progress__header">
+            <div className="hero-progress__eyebrow-row">
+              <p className="eyebrow">Live board status</p>
+              <button
+                type="button"
+                className="sound-toggle"
+                onClick={toggleSound}
+                data-cursor-label="Sound"
+                aria-pressed={soundEnabled}
+                aria-label={soundEnabled ? "Mute sound" : "Enable sound"}
+              >
+                {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+                <span>{soundEnabled ? "Sound on" : "Sound off"}</span>
+              </button>
+            </div>
+            <strong>{raterName || "Waiting for rater"}</strong>
+            <p className="hero-progress__status-copy">
               {!raterName
-                ? "Waiting for rater"
+                ? "No rater identity has been locked yet."
                 : hasMinimumProfiles
-                  ? "Reveal ready"
-                  : "Scoring in progress"}
-            </strong>
+                  ? "The reveal threshold has been met and the report can be opened."
+                  : "The board is still building toward the first shared reveal."}
+            </p>
           </div>
+          <div
+            className={`hero-beacon ${
+              hasMinimumProfiles
+                ? "hero-beacon--live"
+                : revealProfilesLeft === 1
+                  ? "hero-beacon--hot"
+                  : ""
+            }`}
+          >
+            <span className="hero-beacon__label">Reveal signal</span>
+            <strong>{revealSignalLabel}</strong>
+            <p>
+              {bestOverall.score !== null
+                ? `${provisionalLeader} is currently leading at ${formatScore(bestOverall.score)} overall.`
+                : "Complete full profiles to surface a provisional leader."}
+            </p>
+          </div>
+          <div className="hero-progress__stats">
+            <div className="hero-progress__stat">
+              <span>Girls completed</span>
+              <strong>
+                {completedPeople}/{people.length}
+              </strong>
+            </div>
+            <div className="hero-progress__stat">
+              <span>Reveal threshold</span>
+              <strong>{MIN_COMPLETED_PROFILES} full girls</strong>
+            </div>
+            <div className="hero-progress__stat">
+              <span>Saved logs</span>
+              <strong>{activityLog.length}</strong>
+            </div>
+            <div className="hero-progress__stat">
+              <span>Status</span>
+              <strong>
+                {!raterName
+                  ? "Waiting for rater"
+                  : hasMinimumProfiles
+                    ? "Reveal ready"
+                    : "Scoring in progress"}
+              </strong>
+            </div>
+          </div>
+          <p className="hero-progress__sound-note">
+            {soundUnlocked
+              ? "Reactive ambience and interaction sounds are live."
+              : "Sound unlocks on the first click or key press."}
+          </p>
+          <div className="hero-progress__meter">
+            <div>
+              <span>Roster progress</span>
+              <strong>{overallProgressPercent}%</strong>
+            </div>
+            <div className="hero-progress__track">
+              <span style={{ width: `${overallProgressPercent}%` }} />
+            </div>
+          </div>
+          <div className="hero-progress__meter">
+            <div>
+              <span>Reveal progress</span>
+              <strong>{revealProgressPercent}%</strong>
+            </div>
+            <div className="hero-progress__track hero-progress__track--warm">
+              <span style={{ width: `${revealProgressPercent}%` }} />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="signal-ribbon" aria-label="Live board signals">
+        <div className="signal-ribbon__track">
+          {[...signalTapeItems, ...signalTapeItems].map((item, index) => (
+            <span key={`${item}-${index}`}>{item}</span>
+          ))}
+        </div>
+      </section>
+
+      <section className="workflow-shell" aria-label="Workflow stages">
+        <div className="workflow-band">
+          <div className="workflow-band__threshold">
+            <span>Reveal threshold</span>
+            <strong>{String(MIN_COMPLETED_PROFILES).padStart(2, "0")}</strong>
+            <p>Complete five full profiles to unlock the first ranking, then keep sharpening the board.</p>
+          </div>
+          <div className="workflow-band__tags">
+            <span>1-10 locked sliders</span>
+            <span>Name-bound dataset</span>
+            <span>Readable HTML dossier</span>
+          </div>
+        </div>
+
+        <div className="workflow-shell__header">
+          <div>
+            <p className="eyebrow">Workflow</p>
+            <h2>Three clear phases, one saved board.</h2>
+          </div>
+          <p>
+            The interface now moves like a session: identify the rater, build the board, then open
+            the report.
+          </p>
+        </div>
+
+        <div className="stage-strip">
+          <article
+            className={`stage-card ${!raterName ? "stage-card--active" : "stage-card--done"}`}
+          >
+            <span className="stage-card__icon">
+              <Fingerprint size={16} />
+            </span>
+            <span className="stage-card__index">01</span>
+            <div className="stage-card__copy">
+              <p>Identify</p>
+              <strong>Set the rater name and lock the session identity.</strong>
+            </div>
+          </article>
+          <article
+            className={`stage-card ${
+              raterName && !showResults
+                ? "stage-card--active"
+                : showResults
+                  ? "stage-card--done"
+                  : ""
+            }`}
+          >
+            <span className="stage-card__icon">
+              <SlidersHorizontal size={16} />
+            </span>
+            <span className="stage-card__index">02</span>
+            <div className="stage-card__copy">
+              <p>Score</p>
+              <strong>Rate profiles, leave comments, and build the board.</strong>
+            </div>
+          </article>
+          <article className={`stage-card ${showResults ? "stage-card--active" : ""}`}>
+            <span className="stage-card__icon">
+              <Trophy size={16} />
+            </span>
+            <span className="stage-card__index">03</span>
+            <div className="stage-card__copy">
+              <p>Reveal</p>
+              <strong>Unlock the ranking, summary, and export snapshot.</strong>
+            </div>
+          </article>
         </div>
       </section>
 
@@ -1302,6 +1793,15 @@ export default function App() {
           />
 
           <aside className="side-panel">
+            <section className="summary-card summary-card--setup">
+              <p className="eyebrow">How it works</p>
+              <div className="setup-list">
+                <p>Enter the rater name to tie the full board to one identity.</p>
+                <p>Complete any five full profiles to unlock the first reveal.</p>
+                <p>Export a clean HTML report whenever you want a snapshot.</p>
+              </div>
+            </section>
+
             <SystemResultsPanel onExportData={handleExportData} />
           </aside>
         </section>
@@ -1345,22 +1845,53 @@ export default function App() {
                 </button>
               </section>
 
-              <section className="summary-card">
+              <section className="summary-card summary-card--identity">
                 <p className="eyebrow">Active rater</p>
                 <h2 className="summary-card__title">{raterName}</h2>
                 <p className="summary-card__text">
                   Reveal snapshots, logs, comments, and summaries are saved under this name.
                 </p>
+                <div className="summary-metric-grid">
+                  <div className="summary-metric">
+                    <span>Completed</span>
+                    <strong>{completedPeople}</strong>
+                  </div>
+                  <div className="summary-metric">
+                    <span>Logs</span>
+                    <strong>{activityLog.length}</strong>
+                  </div>
+                  <div className="summary-metric">
+                    <span>Reveal</span>
+                    <strong>{showResults ? "Live" : "Locked"}</strong>
+                  </div>
+                </div>
               </section>
 
-              <section className="summary-card">
+              <section className="summary-card summary-card--lineup">
                 <p className="eyebrow">Lineup progress</p>
+                <div className="progress-summary-grid">
+                  <div className="progress-summary-card">
+                    <span>Done</span>
+                    <strong>{completedPeople}</strong>
+                  </div>
+                  <div className="progress-summary-card">
+                    <span>Left</span>
+                    <strong>{Math.max(people.length - completedPeople, 0)}</strong>
+                  </div>
+                  <div className="progress-summary-card">
+                    <span>Threshold</span>
+                    <strong>{MIN_COMPLETED_PROFILES}</strong>
+                  </div>
+                </div>
                 <ul className="progress-list">
                   {people.map((person, index) => {
                     const completedCategories = DEFAULT_CATEGORIES.filter((category) =>
                       isValidRating(Number(ratingsByPerson?.[person.id]?.[category])),
                     ).length;
                     const complete = completedCategories === DEFAULT_CATEGORIES.length;
+                    const completionPercent = Math.round(
+                      (completedCategories / DEFAULT_CATEGORIES.length) * 100,
+                    );
 
                     return (
                       <li key={person.id}>
@@ -1371,12 +1902,18 @@ export default function App() {
                           }`}
                           onClick={() => handleGoToPerson(index)}
                         >
-                          <span>{person.name}</span>
-                          <strong>
-                            {complete
-                              ? "Done"
-                              : `${completedCategories}/${DEFAULT_CATEGORIES.length}`}
-                          </strong>
+                          <div className="progress-person__copy">
+                            <span>{person.name}</span>
+                            <small>
+                              {complete
+                                ? "Fully scored"
+                                : `${completedCategories}/${DEFAULT_CATEGORIES.length} categories complete`}
+                            </small>
+                            <div className="progress-person__bar" aria-hidden="true">
+                              <span style={{ width: `${completionPercent}%` }} />
+                            </div>
+                          </div>
+                          <strong>{complete ? "Done" : `${completionPercent}%`}</strong>
                         </button>
                       </li>
                     );
@@ -1384,7 +1921,7 @@ export default function App() {
                 </ul>
               </section>
 
-              <section className="summary-card">
+              <section className="summary-card summary-card--controls">
                 <p className="eyebrow">Session controls</p>
                 <div className="control-stack">
                   <button
@@ -1408,6 +1945,14 @@ export default function App() {
               <SystemResultsPanel onExportData={handleExportData} />
             </aside>
           </section>
+
+          <BoardMatrix
+            activeIndex={activeIndex}
+            categories={DEFAULT_CATEGORIES}
+            onGoToPerson={handleGoToPerson}
+            people={people}
+            ratingsByPerson={ratingsByPerson}
+          />
 
           {showResults ? (
             <ResultsSummary
