@@ -1,9 +1,10 @@
 import { useEffect, useRef } from "react";
 
-const MAX_DPR = 1.5;
-const GRID_SPACING = 84;
-const CURSOR_RADIUS = 190;
-const LINK_DISTANCE = 122;
+const MAX_DPR = 1.25;
+const GRID_SPACING = 96;
+const CURSOR_RADIUS = 168;
+const LINK_DISTANCE = 128;
+const FRAME_INTERVAL = 1000 / 30;
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
@@ -42,6 +43,8 @@ export default function ConnectedFieldCanvas() {
     let columns = 0;
     let rows = 0;
     let dpr = 1;
+    let lastFrameTime = 0;
+    let pageVisible = !document.hidden;
 
     function buildPoints() {
       columns = Math.max(2, Math.ceil(width / GRID_SPACING) + 2);
@@ -93,7 +96,22 @@ export default function ConnectedFieldCanvas() {
       pointer.visible = false;
     }
 
+    function handleVisibilityChange() {
+      pageVisible = !document.hidden;
+    }
+
     function drawFrame(time) {
+      if (!pageVisible) {
+        rafId = window.requestAnimationFrame(drawFrame);
+        return;
+      }
+
+      if (time - lastFrameTime < FRAME_INTERVAL) {
+        rafId = window.requestAnimationFrame(drawFrame);
+        return;
+      }
+
+      lastFrameTime = time;
       pointer.velocityX += (pointer.targetX - pointer.x) * (prefersReducedMotion ? 0.08 : 0.045);
       pointer.velocityY += (pointer.targetY - pointer.y) * (prefersReducedMotion ? 0.08 : 0.045);
       pointer.velocityX *= prefersReducedMotion ? 0.76 : 0.82;
@@ -166,7 +184,7 @@ export default function ConnectedFieldCanvas() {
             }
 
             const glow = Math.max(point.glow, other.glow);
-            const alpha = 0.038 + glow * 0.17 - distance / 1650;
+            const alpha = 0.026 + glow * 0.13 - distance / 1750;
 
             context.strokeStyle = `rgba(255, 232, 223, ${clamp(alpha, 0.018, 0.22)})`;
             context.beginPath();
@@ -179,8 +197,8 @@ export default function ConnectedFieldCanvas() {
 
       for (let index = 0; index < points.length; index += 1) {
         const point = points[index];
-        const radius = 1.2 + point.glow * 1.7;
-        const alpha = 0.22 + point.glow * 0.58;
+        const radius = 1.05 + point.glow * 1.4;
+        const alpha = 0.18 + point.glow * 0.46;
 
         context.fillStyle = `rgba(255, 243, 236, ${clamp(alpha, 0.12, 0.82)})`;
         context.beginPath();
@@ -197,6 +215,7 @@ export default function ConnectedFieldCanvas() {
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerleave", handlePointerLeave);
     window.addEventListener("blur", handlePointerLeave);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       window.cancelAnimationFrame(rafId);
@@ -204,6 +223,7 @@ export default function ConnectedFieldCanvas() {
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerleave", handlePointerLeave);
       window.removeEventListener("blur", handlePointerLeave);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
 

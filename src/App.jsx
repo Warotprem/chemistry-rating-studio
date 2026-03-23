@@ -288,11 +288,19 @@ function buildExportPayload({
 
 function buildReadableExportHtml({ exportedAt, exportPayload }) {
   const snapshot = exportPayload.currentRevealSnapshot;
-  const topRows = snapshot.rankedRows.slice(0, 10);
+  const topRows = snapshot.rankedRows.filter((row) => row.rank !== null).slice(0, 3);
   const commentEntries = Object.entries(snapshot.commentsByPerson).filter(([, value]) =>
     typeof value === "string" && value.trim(),
   );
   const activityRows = exportPayload.activityLog.slice(0, 25);
+  const leadNames = formatPeopleList(snapshot.bestOverall.names);
+  const leadInsight = snapshot.coachInsights[0];
+  const profileSummaryById = Object.fromEntries(
+    (snapshot.rankedRows || []).map((row) => [
+      row.person.id,
+      typeof row.person.summary === "string" ? row.person.summary.trim() : "",
+    ]),
+  );
 
   const categoryLeaderRows = snapshot.bestByCategory
     .map(
@@ -314,11 +322,11 @@ function buildReadableExportHtml({ exportedAt, exportPayload }) {
     )
     .join("");
 
-  const rankingRows = topRows
+  const rankingRows = snapshot.rankedRows
     .map(
       (row) => `
-        <tr>
-          <td>${createHtmlSafeText(row.rank ?? "--")}</td>
+        <tr class="${row.rank && row.rank <= 3 ? "ranking-row--top" : ""}">
+          <td><span class="rank-badge">${createHtmlSafeText(row.rank ?? "--")}</span></td>
           <td>${createHtmlSafeText(row.person.name)}</td>
           <td>${createHtmlSafeText(formatScore(row.overallScore))}</td>
           ${snapshot.categories
@@ -332,17 +340,25 @@ function buildReadableExportHtml({ exportedAt, exportPayload }) {
     .join("");
 
   const coachRows = snapshot.coachInsights
-    .slice(0, 8)
     .map(
       (insight) => `
         <article class="coach-card">
           <div class="coach-head">
             <div>
               <h3>${createHtmlSafeText(insight.name)}</h3>
-              <p>${createHtmlSafeText(insight.scoreboard)}</p>
+              <p>${createHtmlSafeText(insight.role || insight.scoreboard)}</p>
             </div>
             <span class="pill">${createHtmlSafeText(insight.profileTag)}</span>
           </div>
+          <div class="coach-meta">
+            <span>${createHtmlSafeText(insight.scoreboard)}</span>
+            <strong>${createHtmlSafeText(insight.instinctLabel)}</strong>
+          </div>
+          ${
+            profileSummaryById[insight.id]
+              ? `<p class="coach-comment">${createHtmlSafeText(profileSummaryById[insight.id])}</p>`
+              : ""
+          }
           <p class="coach-label">${createHtmlSafeText(insight.instinctLabel)}</p>
           <p>${createHtmlSafeText(insight.profileVerdict)}</p>
           <p class="muted">${createHtmlSafeText(insight.coachComment)}</p>
@@ -415,11 +431,19 @@ function buildReadableExportHtml({ exportedAt, exportPayload }) {
       .hero-meta { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
       .metric { background: rgba(255,255,255,0.04); border-radius: 18px; padding: 14px; }
       .metric strong { display: block; margin-top: 10px; font-size: 22px; color: var(--text); }
-      .results-grid, .coach-grid, .comments-grid { display: grid; gap: 12px; margin-top: 20px; }
+      .report-head, .insight-strip, .podium, .results-grid, .coach-grid, .comments-grid, .taste-metrics, .taste-points { display: grid; gap: 12px; margin-top: 20px; }
+      .report-head { grid-template-columns: 1.6fr 1fr; align-items: stretch; }
+      .lead-callout { background: linear-gradient(145deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03)); }
+      .hero-band { display: grid; gap: 12px; }
+      .hero-band > div { background: rgba(255,255,255,0.04); border-radius: 18px; padding: 16px; }
+      .insight-strip { grid-template-columns: 1.2fr 1fr; }
+      .podium { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .results-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
       .coach-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .comments-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .result-card { background: var(--surface-strong); }
+      .podium-card { background: rgba(255,255,255,0.04); min-height: 180px; display: flex; flex-direction: column; justify-content: flex-end; }
+      .podium-card--lead { background: linear-gradient(165deg, rgba(255,159,182,0.16), rgba(255,255,255,0.05)); }
       .dense-row { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
       .dense-row:last-child { border-bottom: 0; }
       .dense-row span, .muted, .empty, td { color: var(--text-soft); }
@@ -428,13 +452,21 @@ function buildReadableExportHtml({ exportedAt, exportPayload }) {
       th { background: rgba(87, 30, 44, 0.84); }
       .coach-card, .comment-card { background: rgba(255,255,255,0.04); }
       .coach-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+      .coach-meta, .taste-metrics { display: flex; gap: 12px; flex-wrap: wrap; color: var(--text-soft); }
+      .coach-meta strong, .taste-verdict, .lead-callout h3, .podium-card strong, .result-card strong { color: var(--text); }
+      .coach-comment { padding: 12px 14px; border-radius: 14px; background: rgba(255,255,255,0.05); color: var(--text); }
       .coach-label { color: var(--warm); font-weight: 700; margin: 12px 0; }
       .pill { display: inline-flex; align-items: center; padding: 8px 11px; border-radius: 999px; background: rgba(255,159,182,0.1); }
+      .rank-badge { display: inline-flex; min-width: 34px; justify-content: center; padding: 6px 10px; border-radius: 999px; background: rgba(255,255,255,0.08); color: var(--text); font-weight: 700; }
+      .ranking-row--top td { background: rgba(255,255,255,0.025); }
+      .taste-card, .ranking-shell { background: var(--surface); }
+      .taste-points { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .taste-point { margin: 0; padding: 14px 16px; border-radius: 16px; background: rgba(255,255,255,0.04); color: var(--text-soft); }
       .section-title { margin: 28px 0 14px; }
       details { margin-top: 24px; }
       pre { white-space: pre-wrap; word-break: break-word; color: var(--text-soft); background: rgba(255,255,255,0.04); padding: 16px; border-radius: 16px; overflow: auto; }
       @media (max-width: 980px) {
-        .results-grid, .coach-grid, .comments-grid, .hero-meta { grid-template-columns: 1fr; }
+        .report-head, .insight-strip, .podium, .results-grid, .coach-grid, .comments-grid, .hero-meta, .taste-points { grid-template-columns: 1fr; }
         .dense-row, .coach-head { flex-direction: column; }
       }
     </style>
@@ -471,7 +503,73 @@ function buildReadableExportHtml({ exportedAt, exportPayload }) {
         </div>
       </section>
 
+      <div class="report-head">
+        <section class="lead-callout">
+          <p class="eyebrow">Lead statement</p>
+          <h3>${createHtmlSafeText(`${leadNames} set the pace at ${formatScore(snapshot.bestOverall.score)} overall.`)}</h3>
+          <p>${createHtmlSafeText(snapshot.raterProfile?.summary || "The board now has enough completed profiles to show a real pattern instead of loose guesses.")}</p>
+        </section>
+        <section class="hero-band">
+          <div>
+            <p class="eyebrow">Lead result</p>
+            <strong>${createHtmlSafeText(leadNames)}</strong>
+            <p class="muted">Highest overall board score at reveal time.</p>
+          </div>
+          <div>
+            <p class="eyebrow">Overall score</p>
+            <strong>${createHtmlSafeText(formatScore(snapshot.bestOverall.score))}</strong>
+            <p class="muted">Calculated from the completed category average.</p>
+          </div>
+          <div>
+            <p class="eyebrow">Profiles analyzed</p>
+            <strong>${createHtmlSafeText(snapshot.analyzedCount)}</strong>
+            <p class="muted">Completed profiles included in this report.</p>
+          </div>
+        </section>
+      </div>
+
+      <div class="insight-strip">
+        <article class="result-card">
+          <p class="eyebrow">Rater profile</p>
+          <h3>${createHtmlSafeText(snapshot.raterProfile?.headline || "Profile still forming")}</h3>
+          <p>${createHtmlSafeText(snapshot.raterProfile?.overallVerdict || "Reveal more completed profiles to make the taste profile sharper.")}</p>
+        </article>
+        <article class="result-card">
+          <p class="eyebrow">Lead read</p>
+          <h3>${createHtmlSafeText(leadInsight?.name || "No assessment yet")}</h3>
+          <p>${createHtmlSafeText(leadInsight?.coachComment || "Once the reveal is available, the strongest profile note will surface here.")}</p>
+        </article>
+      </div>
+
+      ${
+        topRows.length
+          ? `<div class="podium">
+              ${topRows
+                .map(
+                  (row, index) => `
+                    <article class="podium-card ${index === 0 ? "podium-card--lead" : ""}">
+                      <p class="eyebrow">${createHtmlSafeText(index === 0 ? "Current leader" : `Place ${index + 1}`)}</p>
+                      <h3>${createHtmlSafeText(row.person.name)}</h3>
+                      <strong>${createHtmlSafeText(formatScore(row.overallScore))}</strong>
+                      <p class="muted">${createHtmlSafeText(`${row.rank ? `Rank ${row.rank}` : "Unranked"} · ${row.person.role || "Scored profile"}`)}</p>
+                    </article>`,
+                )
+                .join("")}
+            </div>`
+          : ""
+      }
+
       <div class="results-grid">
+        <article class="result-card">
+          <p class="eyebrow">Top overall</p>
+          <h3>${createHtmlSafeText(leadNames)}</h3>
+          <strong>${createHtmlSafeText(formatScore(snapshot.bestOverall.score))}</strong>
+        </article>
+        <article class="result-card">
+          <p class="eyebrow">Girls analyzed</p>
+          <h3>${createHtmlSafeText(snapshot.analyzedCount)}</h3>
+          <strong>${createHtmlSafeText(`${snapshot.peopleCount} in roster · ${snapshot.categories.length} categories each`)}</strong>
+        </article>
         <article class="result-card">
           <p class="eyebrow">Category leaders</p>
           ${categoryLeaderRows}
@@ -480,22 +578,18 @@ function buildReadableExportHtml({ exportedAt, exportPayload }) {
           <p class="eyebrow">Category averages</p>
           ${categoryAverageRows}
         </article>
-        <article class="result-card">
-          <p class="eyebrow">Rater profile</p>
-          <h3>${createHtmlSafeText(snapshot.raterProfile?.headline || "No profile")}</h3>
-          <p>${createHtmlSafeText(snapshot.raterProfile?.summary || "No profile summary available.")}</p>
-          <p class="muted">${createHtmlSafeText(snapshot.raterProfile?.overallVerdict || "")}</p>
-        </article>
-        <article class="result-card">
-          <p class="eyebrow">Generated summary</p>
-          <h3>${createHtmlSafeText(snapshot.generatedSummary?.revealHeadline || "No summary")}</h3>
-          <p>${createHtmlSafeText(snapshot.generatedSummary?.profileSummary || "")}</p>
-          <p class="muted">${createHtmlSafeText(snapshot.generatedSummary?.coachSummary || "")}</p>
-        </article>
       </div>
 
+      <h2 class="section-title">Summary</h2>
+      <section class="result-card">
+        <p class="eyebrow">Generated summary</p>
+        <h3>${createHtmlSafeText(snapshot.generatedSummary?.revealHeadline || "No summary available")}</h3>
+        <p>${createHtmlSafeText(snapshot.generatedSummary?.profileSummary || snapshot.raterProfile?.summary || "")}</p>
+        <p class="muted">${createHtmlSafeText(snapshot.generatedSummary?.coachSummary || "")}</p>
+      </section>
+
       <h2 class="section-title">Ranking</h2>
-      <section>
+      <section class="ranking-shell">
         <table>
           <thead>
             <tr>
@@ -510,6 +604,28 @@ function buildReadableExportHtml({ exportedAt, exportPayload }) {
           </tbody>
         </table>
       </section>
+
+      ${
+        snapshot.raterProfile
+          ? `
+            <h2 class="section-title">What your ratings say about you</h2>
+            <section class="taste-card">
+              <p>${createHtmlSafeText(snapshot.raterProfile.summary || "")}</p>
+              <p class="taste-verdict">${createHtmlSafeText(snapshot.raterProfile.overallVerdict || "")}</p>
+              <div class="taste-metrics">
+                <span>${createHtmlSafeText(`Visual pull ${formatScore(snapshot.raterProfile.metrics?.visualAverage ?? null)}`)}</span>
+                <span>${createHtmlSafeText(`Character pull ${formatScore(snapshot.raterProfile.metrics?.characterAverage ?? null)}`)}</span>
+                <span>${createHtmlSafeText(`Personal average ${formatScore(snapshot.raterProfile.metrics?.personalAverage ?? null)}`)}</span>
+              </div>
+              <div class="taste-points">
+                ${(snapshot.raterProfile.bullets || [])
+                  .map((bullet) => `<p class="taste-point">${createHtmlSafeText(bullet)}</p>`)
+                  .join("")}
+              </div>
+            </section>
+          `
+          : ""
+      }
 
       <h2 class="section-title">Assessment</h2>
       <div class="coach-grid">
@@ -581,12 +697,6 @@ export default function App() {
   const resultsRef = useRef(null);
   const syncedActivityIdsRef = useRef(new Set());
   const grayDetectorTimeoutRef = useRef(null);
-  const cursorLabelRef = useRef(null);
-  const cursorMotionRef = useRef({
-    x: 0,
-    y: 0,
-    timestamp: 0,
-  });
   const {
     soundEnabled,
     soundUnlocked,
@@ -760,255 +870,63 @@ export default function App() {
       return undefined;
     }
 
-    const root = document.documentElement;
-    const cursorLabelNode = cursorLabelRef.current;
-    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const targetCursor = {
-      x: window.innerWidth / 2,
-      y: window.innerHeight / 2,
-      speed: 0,
-      angle: 0,
-    };
-    const smoothCursor = {
-      x: targetCursor.x,
-      y: targetCursor.y,
-      speed: 0,
-    };
-    let animationFrameId = 0;
+    let activeMode = "default";
 
-    function setCursorLabel(value) {
-      if (!cursorLabelNode) {
-        return;
-      }
-
-      const label = typeof value === "string" ? value.trim().replace(/\s+/g, " ").slice(0, 20) : "";
-
-      cursorLabelNode.textContent = label;
-      cursorLabelNode.dataset.visible = label ? "true" : "false";
-    }
-
-    function resolveCursorState(target) {
+    function resolveCursorMode(target) {
       if (!(target instanceof Element)) {
-        return {
-          mode: "default",
-          label: "",
-        };
+        return "default";
       }
 
       if (target.closest('input[type="range"], .category-card')) {
-        return {
-          mode: "rate",
-          label: "Rate",
-        };
+        return "rate";
       }
 
       if (target.closest("textarea, input:not([type='range'])")) {
-        return {
-          mode: "text",
-          label: "Type",
-        };
+        return "text";
       }
 
-      const buttonTarget = target.closest("button, [role='button']");
-
-      if (buttonTarget) {
-        const rawText =
-          buttonTarget.getAttribute("data-cursor-label") ||
-          buttonTarget.getAttribute("aria-label") ||
-          buttonTarget.textContent ||
-          "";
-        const normalizedText = rawText.trim().replace(/\s+/g, " ").toLowerCase();
-        let label = "Select";
-
-        if (normalizedText.includes("export")) {
-          label = "Export";
-        } else if (normalizedText.includes("reveal")) {
-          label = "Reveal";
-        } else if (normalizedText.includes("start")) {
-          label = "Start";
-        } else if (normalizedText.includes("reset")) {
-          label = "Reset";
-        } else if (normalizedText.includes("switch")) {
-          label = "Switch";
-        } else if (normalizedText.includes("next")) {
-          label = "Next";
-        } else if (normalizedText.includes("previous")) {
-          label = "Back";
-        }
-
-        return {
-          mode: "action",
-          label,
-        };
+      if (target.closest("button, [role='button']")) {
+        return "action";
       }
 
       if (target.closest(".progress-person")) {
-        return {
-          mode: "inspect",
-          label: "Jump",
-        };
+        return "inspect";
       }
 
-      if (
-        target.closest(
-          ".result-card, .podium-card, .coach-card, .summary-card, .locked-card, .signal-stage__lead-card, .signal-stage__support-card, .signal-stage__band",
-        )
-      ) {
-        return {
-          mode: "inspect",
-          label: "",
-        };
+      if (target.closest(".result-card, .podium-card, .coach-card, .summary-card, .locked-card")) {
+        return "inspect";
       }
 
-      return {
-        mode: "default",
-        label: "",
-      };
-    }
-
-    function setPointerPosition(event) {
-      if (event.pointerType && event.pointerType !== "mouse") {
-        root.dataset.cursorVisible = "false";
-        return;
-      }
-
-      const now = performance.now();
-      const previous = cursorMotionRef.current;
-      const deltaX = event.clientX - previous.x;
-      const deltaY = event.clientY - previous.y;
-      const deltaTime = Math.max(now - previous.timestamp, 16);
-      const distance = Math.hypot(deltaX, deltaY);
-      const speed = Math.min(distance / deltaTime / 1.2, 1.4);
-      const angle = distance > 0.5 ? Math.atan2(deltaY, deltaX) : 0;
-
-      root.style.setProperty("--cursor-x", `${event.clientX}px`);
-      root.style.setProperty("--cursor-y", `${event.clientY}px`);
-        root.style.setProperty("--cursor-speed", speed.toFixed(3));
-        root.style.setProperty("--cursor-angle", `${angle}rad`);
-      root.dataset.cursorVisible = "true";
-
-      targetCursor.x = event.clientX;
-      targetCursor.y = event.clientY;
-      targetCursor.speed = speed;
-      targetCursor.angle = angle;
-
-      cursorMotionRef.current = {
-        x: event.clientX,
-        y: event.clientY,
-        timestamp: now,
-      };
-    }
-
-    function handlePointerDown() {
-      root.dataset.pointerDown = "true";
-    }
-
-    function handlePointerUp() {
-      root.dataset.pointerDown = "false";
+      return "default";
     }
 
     function updateCursorMode(event) {
-      const target = event.target;
-      const nextCursorState = resolveCursorState(target);
-      const previousMode = root.dataset.cursorMode || "default";
-
-      root.dataset.cursorMode = nextCursorState.mode;
-      setCursorLabel(nextCursorState.label);
+      const nextMode = resolveCursorMode(event.target);
 
       if (
-        nextCursorState.mode !== previousMode &&
-        (nextCursorState.mode === "action" ||
-          nextCursorState.mode === "rate" ||
-          nextCursorState.mode === "inspect")
+        nextMode !== activeMode &&
+        (nextMode === "action" || nextMode === "rate" || nextMode === "inspect")
       ) {
-        playHover(nextCursorState.mode);
+        playHover(nextMode);
       }
+
+      activeMode = nextMode;
     }
 
     function handlePointerLeave() {
-      root.dataset.cursorVisible = "false";
-      root.dataset.cursorMode = "default";
-      setCursorLabel("");
+      activeMode = "default";
     }
 
-    function animateCursorField() {
-      const motionEase = prefersReducedMotion ? 0.36 : 0.11;
-      const speedEase = prefersReducedMotion ? 0.34 : 0.08;
-
-      smoothCursor.x += (targetCursor.x - smoothCursor.x) * motionEase;
-      smoothCursor.y += (targetCursor.y - smoothCursor.y) * motionEase;
-      smoothCursor.speed += (targetCursor.speed - smoothCursor.speed) * speedEase;
-
-      const normalizedX = smoothCursor.x / window.innerWidth - 0.5;
-      const normalizedY = smoothCursor.y / window.innerHeight - 0.5;
-      const softX = normalizedX * 5;
-      const softY = normalizedY * 5;
-      const mediumX = normalizedX * 10;
-      const mediumY = normalizedY * 10;
-      const strongX = normalizedX * 16;
-      const strongY = normalizedY * 16;
-
-      root.style.setProperty("--cursor-smooth-x", `${smoothCursor.x}px`);
-      root.style.setProperty("--cursor-smooth-y", `${smoothCursor.y}px`);
-      root.style.setProperty("--cursor-shift-x-soft", `${softX}px`);
-      root.style.setProperty("--cursor-shift-y-soft", `${softY}px`);
-      root.style.setProperty("--cursor-shift-x-medium", `${mediumX}px`);
-      root.style.setProperty("--cursor-shift-y-medium", `${mediumY}px`);
-      root.style.setProperty("--cursor-shift-x-strong", `${strongX}px`);
-      root.style.setProperty("--cursor-shift-y-strong", `${strongY}px`);
-      root.style.setProperty("--cursor-orbit-x", `${normalizedX * 72}px`);
-      root.style.setProperty("--cursor-orbit-y", `${normalizedY * 72}px`);
-      root.style.setProperty("--cursor-field-bloom", `${0.92 + smoothCursor.speed * 0.22}`);
-      root.style.setProperty("--cursor-field-alpha", `${0.12 + smoothCursor.speed * 0.05}`);
-      root.style.setProperty("--cursor-field-spark", `${0.2 + smoothCursor.speed * 0.12}`);
-      root.style.setProperty("--cursor-field-drift", `${0.42 + smoothCursor.speed * 0.16}`);
-
-      animationFrameId = window.requestAnimationFrame(animateCursorField);
-    }
-
-    window.addEventListener("pointermove", setPointerPosition);
-    window.addEventListener("pointerdown", handlePointerDown);
-    window.addEventListener("pointerup", handlePointerUp);
-    window.addEventListener("pointercancel", handlePointerUp);
     window.addEventListener("pointerover", updateCursorMode);
     window.addEventListener("pointerleave", handlePointerLeave);
     window.addEventListener("blur", handlePointerLeave);
-    root.dataset.pointerDown = "false";
-    root.dataset.cursorMode = "default";
-    root.dataset.cursorVisible = "false";
-    root.style.setProperty("--cursor-speed", "0");
-    root.style.setProperty("--cursor-angle", "0rad");
-    root.style.setProperty("--cursor-smooth-x", `${targetCursor.x}px`);
-    root.style.setProperty("--cursor-smooth-y", `${targetCursor.y}px`);
-    root.style.setProperty("--cursor-shift-x-soft", "0px");
-    root.style.setProperty("--cursor-shift-y-soft", "0px");
-    root.style.setProperty("--cursor-shift-x-medium", "0px");
-    root.style.setProperty("--cursor-shift-y-medium", "0px");
-    root.style.setProperty("--cursor-shift-x-strong", "0px");
-    root.style.setProperty("--cursor-shift-y-strong", "0px");
-    root.style.setProperty("--cursor-orbit-x", "0px");
-    root.style.setProperty("--cursor-orbit-y", "0px");
-    root.style.setProperty("--cursor-field-bloom", "1");
-    root.style.setProperty("--cursor-field-alpha", "0.24");
-    root.style.setProperty("--cursor-field-spark", "0.52");
-    root.style.setProperty("--cursor-field-drift", "0.72");
-    setCursorLabel("");
-    animationFrameId = window.requestAnimationFrame(animateCursorField);
 
     return () => {
-      window.cancelAnimationFrame(animationFrameId);
-      window.removeEventListener("pointermove", setPointerPosition);
-      window.removeEventListener("pointerdown", handlePointerDown);
-      window.removeEventListener("pointerup", handlePointerUp);
-      window.removeEventListener("pointercancel", handlePointerUp);
       window.removeEventListener("pointerover", updateCursorMode);
       window.removeEventListener("pointerleave", handlePointerLeave);
       window.removeEventListener("blur", handlePointerLeave);
-      delete root.dataset.pointerDown;
-      delete root.dataset.cursorMode;
-      delete root.dataset.cursorVisible;
     };
-  }, []);
+  }, [playHover]);
 
   useEffect(
     () => () => {
